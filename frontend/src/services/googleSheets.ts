@@ -26,6 +26,7 @@ export const fetchSheetData = async (
 
     if (!response.ok) {
         if (response.status === 401) {
+            window.dispatchEvent(new Event('auth-expired'));
             throw new Error('UNAUTHORIZED');
         }
         throw new Error(`Failed to fetch data from sheet: ${response.statusText}`);
@@ -63,7 +64,10 @@ export const appendRow = async (
     );
 
     if (!response.ok) {
-        if (response.status === 401) throw new Error('UNAUTHORIZED');
+        if (response.status === 401) {
+            window.dispatchEvent(new Event('auth-expired'));
+            throw new Error('UNAUTHORIZED');
+        }
         console.error('Failed to append row', await response.text());
         return false;
     }
@@ -87,7 +91,10 @@ export const updateRow = async (
     );
 
     if (!response.ok) {
-        if (response.status === 401) throw new Error('UNAUTHORIZED');
+        if (response.status === 401) {
+            window.dispatchEvent(new Event('auth-expired'));
+            throw new Error('UNAUTHORIZED');
+        }
         console.error('Failed to update row', await response.text());
         return false;
     }

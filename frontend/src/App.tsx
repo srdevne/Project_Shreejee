@@ -4,8 +4,11 @@ import Layout from './components/Layout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Sales from './pages/transactions/Sales';
+import Purchases from './pages/transactions/Purchases';
 import Materials from './pages/masters/Materials';
 import Parties from './pages/masters/Parties';
+import Expenses from './pages/financials/Expenses';
+import OwnerDashboard from './pages/financials/OwnerDashboard';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { isAuthenticated } = useAuth();
@@ -38,6 +41,14 @@ function AppRoutes() {
         }
       />
       <Route
+        path="/purchases"
+        element={
+          <ProtectedRoute>
+            <Purchases />
+          </ProtectedRoute>
+        }
+      />
+      <Route
         path="/materials"
         element={
           <ProtectedRoute>
@@ -50,6 +61,22 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Parties />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/expenses"
+        element={
+          <ProtectedRoute>
+            <Expenses />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/owner"
+        element={
+          <ProtectedRoute>
+            <OwnerDashboard />
           </ProtectedRoute>
         }
       />

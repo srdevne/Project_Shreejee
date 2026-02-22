@@ -89,7 +89,7 @@ export default function Login() {
 
                 {error && (
                     <div style={{
-                        backgroundColor: 'var(--badge-danger)', color: 'var(--color-danger)',
+                        backgroundColor: '#FEE2E2', color: 'var(--color-danger)',
                         padding: '0.75rem', borderRadius: 'var(--radius-md)', marginBottom: '1.5rem',
                         display: 'flex', alignItems: 'flex-start', gap: '0.5rem', textAlign: 'left',
                         fontSize: '0.875rem', border: '1px solid #FECACA'

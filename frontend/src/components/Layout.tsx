@@ -1,26 +1,60 @@
+import { useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Users, Package, LogOut, Menu, X, FileText } from 'lucide-react';
+import { LayoutDashboard, Users, Package, LogOut, Menu, X, FileText, ShoppingCart, Receipt, TrendingUp, Bell } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { useState } from 'react';
+import { fetchSheetData } from '../services/googleSheets';
 
 interface LayoutProps {
     children: ReactNode;
 }
 
 export default function Layout({ children }: LayoutProps) {
-    const { user, logout } = useAuth();
+    const { user, accessToken, logout } = useAuth();
     const navigate = useNavigate();
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+    const [unreadCount, setUnreadCount] = useState(0);
 
     const handleLogout = () => {
         logout();
         navigate('/login');
     };
 
+    useEffect(() => {
+        const handleAuthExpired = () => {
+            alert('Your session has expired. Please log in again.');
+            handleLogout();
+        };
+        window.addEventListener('auth-expired', handleAuthExpired);
+        return () => window.removeEventListener('auth-expired', handleAuthExpired);
+    }, []);
+
+    // Poll for new notifications (owner only)
+    useEffect(() => {
+        if (user?.role !== 'owner' || !accessToken) return;
+        const fetchNotifications = async () => {
+            try {
+                const data = await fetchSheetData(accessToken, 'Notifications!A2:D');
+                // Count notifications from last 7 days
+                const recent = data.filter(r => {
+                    if (!r[0]) return false;
+                    const ms = Date.now() - new Date(r[0]).getTime();
+                    return ms < 7 * 24 * 60 * 60 * 1000;
+                });
+                setUnreadCount(recent.length);
+            } catch {
+                // silent — notifications are best-effort
+            }
+        };
+        fetchNotifications();
+    }, [user, accessToken]);
+
     const navItems = [
         { name: 'Dashboard', path: '/', icon: <LayoutDashboard size={20} /> },
+        ...(user?.role === 'owner' ? [{ name: 'Analytics', path: '/owner', icon: <TrendingUp size={20} /> }] : []),
         { name: 'Sales', path: '/sales', icon: <FileText size={20} /> },
+        { name: 'Purchases', path: '/purchases', icon: <ShoppingCart size={20} /> },
+        { name: 'Expenses', path: '/expenses', icon: <Receipt size={20} /> },
         { name: 'Materials', path: '/materials', icon: <Package size={20} /> },
         { name: 'Parties', path: '/parties', icon: <Users size={20} /> },
     ];
@@ -61,6 +95,13 @@ export default function Layout({ children }: LayoutProps) {
                 </nav>
 
                 <div style={{ padding: '1rem', borderTop: '1px solid var(--border-color)' }}>
+                    {/* Notification bell for owner */}
+                    {user?.role === 'owner' && unreadCount > 0 && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', padding: '0.5rem 0.75rem', borderRadius: 'var(--radius-sm)', backgroundColor: 'rgba(245,158,11,0.12)', color: 'var(--color-warning)' }}>
+                            <Bell size={16} />
+                            <span style={{ fontSize: '0.8rem', fontWeight: 600 }}>{unreadCount} edit notification{unreadCount !== 1 ? 's' : ''} (7d)</span>
+                        </div>
+                    )}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
                         <img src={user?.picture} alt="Avatar" style={{ width: '40px', height: '40px', borderRadius: '50%' }} />
                         <div style={{ overflow: 'hidden' }}>
@@ -83,7 +124,7 @@ export default function Layout({ children }: LayoutProps) {
             <main style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
                 {/* Mobile Header */}
                 <header className="mobile-only" style={{
-                    display: 'none', // Overridden in CSS for mobile
+                    display: 'none',
                     padding: '1rem', backgroundColor: 'var(--bg-card)', borderBottom: '1px solid var(--border-color)',
                     alignItems: 'center', justifyContent: 'space-between'
                 }}>
@@ -101,8 +142,6 @@ export default function Layout({ children }: LayoutProps) {
                     {children}
                 </div>
             </main>
-
-            {/* Mobile navigation menu logic can go here (simplified for now) */}
         </div>
     );
 }

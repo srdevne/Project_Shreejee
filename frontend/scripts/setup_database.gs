@@ -43,10 +43,13 @@ function setupDatabase() {
       'No of Bags', 'Weight (KG)', 'Rate per KG', 'Amount'
     ],
     'Expenses': [
-      'Expense ID', 'Date', 'Category', 'Amount', 'Description', 'Entered By'
+      'Expense ID', 'Date', 'Category', 'Amount', 'Description', 'Payment Mode'
     ],
     'Config': [
       'Key', 'Value', 'Description'
+    ],
+    'Notifications': [
+      'Timestamp', 'Type', 'Message', 'By'
     ]
   };
 

@@ -127,18 +127,18 @@ export default function Parties() {
             {isModalOpen && (
                 <div style={{
                     position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-                    backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    zIndex: 50, padding: '1rem', overflowY: 'auto'
+                    backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex',
+                    alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: '1rem'
                 }}>
-                    <div className="card" style={{ width: '100%', maxWidth: '500px', margin: 'auto' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                            <h2 style={{ fontSize: '1.25rem' }}>Add New Party</h2>
+                    <div className="card" style={{ width: '100%', maxWidth: '500px', maxHeight: '95vh', overflowY: 'auto' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                            <h2 style={{ fontSize: '1.1rem' }}>Add New Party</h2>
                             <button onClick={() => setIsModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} /></button>
                         </div>
 
-                        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                <div className="input-group">
+                        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                                <div className="input-group" style={{ gridColumn: '1 / -1' }}>
                                     <label className="input-label">Company / Individual Name *</label>
                                     <input required className="input-field" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
                                 </div>
@@ -150,14 +150,10 @@ export default function Parties() {
                                         <option value="Both">Both</option>
                                     </select>
                                 </div>
-                            </div>
-
-                            <div className="input-group">
-                                <label className="input-label">GSTIN (Optional)</label>
-                                <input className="input-field" value={formData.gstin} onChange={e => setFormData({ ...formData, gstin: e.target.value })} placeholder="e.g. 27AADCB2230M1Z2" />
-                            </div>
-
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                <div className="input-group">
+                                    <label className="input-label">GSTIN (Optional)</label>
+                                    <input className="input-field" value={formData.gstin} onChange={e => setFormData({ ...formData, gstin: e.target.value })} placeholder="27AADCB2230M1Z2" />
+                                </div>
                                 <div className="input-group">
                                     <label className="input-label">Phone Number</label>
                                     <input type="tel" className="input-field" value={formData.phone} onChange={e => setFormData({ ...formData, phone: e.target.value })} />
@@ -166,19 +162,12 @@ export default function Parties() {
                                     <label className="input-label">Email Address</label>
                                     <input type="email" className="input-field" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} />
                                 </div>
+                                <div className="input-group" style={{ gridColumn: '1 / -1' }}>
+                                    <label className="input-label">Billing Address</label>
+                                    <input className="input-field" value={formData.address} onChange={e => setFormData({ ...formData, address: e.target.value })} placeholder="Street, City, State" />
+                                </div>
                             </div>
-
-                            <div className="input-group">
-                                <label className="input-label">Billing Address</label>
-                                <textarea
-                                    className="input-field"
-                                    style={{ minHeight: '80px', resize: 'vertical' }}
-                                    value={formData.address}
-                                    onChange={e => setFormData({ ...formData, address: e.target.value })}
-                                />
-                            </div>
-
-                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '0.5rem' }}>
                                 <button type="button" className="btn btn-secondary" onClick={() => setIsModalOpen(false)}>Cancel</button>
                                 <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
                                     {isSubmitting ? 'Saving...' : 'Save Party'}
