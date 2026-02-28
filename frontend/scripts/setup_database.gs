@@ -28,7 +28,7 @@ function setupDatabase() {
     'Sales': [
       'Invoice No', 'Challan No', 'Invoice Date', 'Order Date', 'Customer ID', 'Customer Name',
       'Total Amount', 'CGST Amount', 'SGST Amount', 'IGST Amount', 'Grand Total',
-      'Payment Mode', 'Payment Status', 'Payment Details', 'Payment Confirmation Date'
+      'Payment Mode', 'Payment Status', 'Payment Details', 'Payment Confirmation Date', 'Order Type'
     ],
     'Sale_Items': [
       'Item ID', 'Invoice No', 'Material ID', 'Material Name', 
@@ -36,7 +36,7 @@ function setupDatabase() {
     ],
     'Purchases': [
       'Purchase ID', 'Bill No', 'Bill Date', 'Supplier ID', 'Supplier Name',
-      'Total Amount', 'Tax Amount', 'Grand Total', 'Payment Status'
+      'Total Amount', 'Tax Amount', 'Grand Total', 'Payment Status', 'Payment Date', 'Payment Ref', 'Photo URLs'
     ],
     'Purchase_Items': [
       'Item ID', 'Purchase ID', 'Material ID', 'Material Name', 
@@ -67,7 +67,7 @@ function setupDatabase() {
     
     // Formatting headers
     headerRange.setFontWeight('bold');
-    headerRange.setBackground('#4F46E5'); // Indigo 600
+    headerRange.setBackground('#8B0000'); // Shreejee Crimson Red
     headerRange.setFontColor('white');
     
     // Freeze top row

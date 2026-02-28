@@ -1,11 +1,11 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 :root {
-  /* Modern Color Palette */
-  --color-primary: #4F46E5;
-  /* Indigo 600 */
-  --color-primary-hover: #4338CA;
-  /* Indigo 700 */
+  /* Shreejee Brand — Crimson Red */
+  --color-primary: #C62828;
+  /* Deep Crimson */
+  --color-primary-hover: #8B0000;
+  /* Dark Red */
   --color-secondary: #059669;
   /* Emerald 600 */
   --color-secondary-hover: #047857;
@@ -30,7 +30,7 @@
 
   --border-color: #E5E7EB;
   /* Gray 200 */
-  --border-focus: #4F46E5;
+  --border-focus: #C62828;
 
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
   --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
@@ -257,6 +257,59 @@ p {
 
 .animate-fade-in {
   animation: fadeIn 0.4s ease-out forwards;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: translateX(0);
+  }
+}
+
+@media print {
+
+  .sidebar,
+  .btn,
+  header,
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: white;
+  }
+
+  .card {
+    box-shadow: none;
+    border: none;
+  }
+}
+
+/* Hide scrollbar on table containers for cleaner mobile look */
+.table-container::-webkit-scrollbar {
+  height: 4px;
+}
+
+.table-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.table-container::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 2px;
 }
 
 /* Layout Responsive Styles */
