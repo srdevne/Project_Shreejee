@@ -43,6 +43,7 @@
 
   --transition-fast: 0.15s ease-in-out;
   --transition-normal: 0.25s ease-in-out;
+  height: 100%;
 }
 
 * {
@@ -324,6 +325,66 @@ p {
 
   .app-layout {
     flex-direction: column !important;
+  }
+
+  /* Page content fills full width on mobile */
+  .page-content {
+    padding: 1rem !important;
+  }
+
+  /* Tables scroll horizontally and use smaller text */
+  th,
+  td {
+    padding: 0.5rem 0.6rem !important;
+    font-size: 0.78rem !important;
+  }
+
+  /* Page headers stack on small screens */
+  .page-header-row {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 0.75rem !important;
+  }
+}
+
+/* ── Narrow phone: single-column form grids ── */
+@media (max-width: 520px) {
+
+  /* Modal card: prevent overflow, fill available width */
+  .card {
+    width: calc(100vw - 2rem) !important;
+    max-width: calc(100vw - 2rem) !important;
+    box-sizing: border-box !important;
+  }
+
+  /* All 2-col grids inside modals → 1 col */
+  .card [style*="gridTemplateColumns"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Ensure grid children don't span beyond 1 col */
+  .card [style*="gridColumn"] {
+    grid-column: 1 / -1 !important;
+  }
+
+  /* Table cells even more compact */
+  th,
+  td {
+    padding: 0.4rem 0.5rem !important;
+    font-size: 0.73rem !important;
+  }
+
+  /* Input fields full width */
+  .input-field,
+  .input-group {
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Buttons in action rows wrap */
+  .btn {
+    font-size: 0.78rem !important;
+    padding: 0.45rem 0.7rem !important;
   }
 }
 

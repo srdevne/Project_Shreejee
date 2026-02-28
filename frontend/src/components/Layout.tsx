@@ -128,7 +128,7 @@ export default function Layout({ children }: LayoutProps) {
             )}
 
             {/* ── Main Content ─────────────────────────────────────────────────── */}
-            <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100vh', overflow: 'hidden' }}>
+            <main style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
                 {/* Mobile top bar */}
                 <header className="mobile-only" style={{
                     display: 'none', padding: '0.875rem 1rem',
@@ -155,7 +155,7 @@ export default function Layout({ children }: LayoutProps) {
                 </header>
 
                 {/* Page content */}
-                <div style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', backgroundColor: 'var(--bg-app)' }}>
+                <div className="page-content" style={{ flex: 1, overflowY: 'auto', padding: '1.5rem', backgroundColor: 'var(--bg-app)', overscrollBehavior: 'none' }}>
                     {children}
                 </div>
             </main>
