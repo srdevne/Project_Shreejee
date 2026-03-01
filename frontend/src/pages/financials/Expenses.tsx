@@ -11,9 +11,11 @@ const EXPENSE_CATEGORIES = [
     'Telephone / Internet',
     'Vehicle Fuel',
     'Rent',
-    'Promotional / Marketing',
+    'Electricity Bill',
+    "Municipal Tax",
+    "SICOF Tax",
     'Bank Charges',
-    'Miscellaneous',
+    'Other',
 ];
 
 export default function Expenses() {

@@ -33,6 +33,8 @@ export default function Sales() {
         invoiceNo: 'INV-00001',
         date: new Date().toISOString().split('T')[0],
         customerId: '',
+        customerGstin: '',
+        customerAddress: '',
         orderType: ORDER_TYPES[0],
         paymentMode: 'Bank Transfer',
     });
@@ -78,12 +80,25 @@ export default function Sales() {
             invoiceNo: invNo,
             date: new Date().toISOString().split('T')[0],
             customerId: '',
+            customerGstin: '',
+            customerAddress: '',
             orderType: ORDER_TYPES[0],
             paymentMode: 'Bank Transfer',
         });
         setLineItems([]);
         setCurrentItem({ materialId: '', bags: '', weight: '', rate: '' });
         setIsModalOpen(true);
+    };
+
+    // When customer is selected, auto-populate GSTIN + address
+    const handleCustomerSelect = (partyId: string) => {
+        const party = parties.find(p => p[0] === partyId);
+        setFormData(prev => ({
+            ...prev,
+            customerId: partyId,
+            customerGstin: party?.[3] || '',
+            customerAddress: party?.[6] || '',
+        }));
     };
 
     const handleMaterialSelect = (matId: string) => {
@@ -138,6 +153,8 @@ export default function Sales() {
             const { subTotal, taxTotal, grandTotal } = invoiceTotals;
             const cgst = taxTotal / 2;
             const sgst = taxTotal / 2;
+            // Generate unique verifiable invoice UID
+            const uid = `SJE-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
 
             const saleRow = [
                 formData.invoiceNo, '', formData.date, formData.date,
@@ -147,8 +164,9 @@ export default function Sales() {
                 formData.paymentMode,
                 'Pending', '', '',
                 formData.orderType,  // col P
+                uid,                 // col Q — unique verifiable UID
             ];
-            await appendRow(accessToken, 'Sales!A:P', [saleRow]);
+            await appendRow(accessToken, 'Sales!A:Q', [saleRow]);
 
             // Append each line item
             for (const item of lineItems) {
@@ -317,9 +335,8 @@ export default function Sales() {
 
             {/* ── New Invoice Modal ─────────────────────────────────────────────── */}
             {isModalOpen && (
-                <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.55)', overflowY: 'auto', zIndex: 50, padding: '1.5rem 1rem' }}
-                    onClick={(e) => { if (e.target === e.currentTarget) setIsModalOpen(false); }}>
-                    <div className="card" style={{ width: '100%', maxWidth: '620px', margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setIsModalOpen(false); }}>
+                    <div className="card" style={{ width: '100%', maxWidth: '620px', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                         {/* Header */}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <h2 style={{ fontSize: '1.1rem' }}>New Invoice — <span style={{ color: 'var(--color-primary)' }}>{formData.invoiceNo}</span></h2>
@@ -338,10 +355,17 @@ export default function Sales() {
                             </div>
                             <div className="input-group" style={{ gridColumn: '1 / -1' }}>
                                 <label className="input-label">Customer *</label>
-                                <select required className="input-field" value={formData.customerId} onChange={e => setFormData({ ...formData, customerId: e.target.value })}>
+                                <select required className="input-field" value={formData.customerId}
+                                    onChange={e => handleCustomerSelect(e.target.value)}>
                                     <option value="">-- Select Customer --</option>
                                     {parties.map(p => <option key={p[0]} value={p[0]}>{p[1]}</option>)}
                                 </select>
+                                {formData.customerGstin && (
+                                    <p style={{ margin: '0.2rem 0 0', fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                                        GSTIN: <strong>{formData.customerGstin}</strong>
+                                        {formData.customerAddress && <> &nbsp;·&nbsp; {formData.customerAddress.split('\n')[0]}</>}
+                                    </p>
+                                )}
                             </div>
                             <div className="input-group">
                                 <label className="input-label">Order Received Via</label>
@@ -373,18 +397,41 @@ export default function Sales() {
                             </div>
 
                             {/* Row 2: Bags | Weight | Rate */}
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.5rem', marginBottom: '0.5rem' }}>
                                 <div className="input-group">
                                     <label className="input-label">Bags</label>
                                     <input type="number" className="input-field" value={currentItem.bags} onChange={e => setCurrentItem({ ...currentItem, bags: e.target.value })} placeholder="0" />
                                 </div>
                                 <div className="input-group">
                                     <label className="input-label">Weight (KG)</label>
-                                    <input type="number" step="0.01" className="input-field" value={currentItem.weight} onChange={e => setCurrentItem({ ...currentItem, weight: e.target.value })} placeholder="0.00" />
+                                    <input type="number" step="1" className="input-field" value={currentItem.weight} onChange={e => setCurrentItem({ ...currentItem, weight: e.target.value })} placeholder="00" />
                                 </div>
                                 <div className="input-group">
-                                    <label className="input-label">Rate/KG (&#8377;)</label>
-                                    <input type="number" step="0.01" className="input-field" value={currentItem.rate} onChange={e => setCurrentItem({ ...currentItem, rate: e.target.value })} placeholder="0.00" />
+                                    <label className="input-label">Rate/KG (&#8377;)
+                                        {(() => {
+                                            const mat = materials.find(m => m[0] === currentItem.materialId);
+                                            return mat?.[7] ? <span style={{ fontWeight: 400, color: 'var(--text-tertiary)', marginLeft: '0.3rem' }}>(: ₹{mat[7]})</span> : null;
+                                        })()}
+                                    </label>
+                                    <input type="number" step="0.01" className="input-field"
+                                        value={currentItem.rate}
+                                        onChange={e => setCurrentItem({ ...currentItem, rate: e.target.value })}
+                                        placeholder="0.00"
+                                        style={(() => {
+                                            const mat = materials.find(m => m[0] === currentItem.materialId);
+                                            const buyRate = parseFloat(mat?.[6] || '0');
+                                            const enteredRate = parseFloat(currentItem.rate || '0');
+                                            return (buyRate > 0 && enteredRate > 0 && enteredRate < buyRate * 1.1)
+                                                ? { borderColor: 'var(--color-warning)', backgroundColor: 'rgba(245,158,11,0.06)' } : {};
+                                        })()} />
+                                    {(() => {
+                                        const mat = materials.find(m => m[0] === currentItem.materialId);
+                                        const buyRate = parseFloat(mat?.[6] || '0');
+                                        const enteredRate = parseFloat(currentItem.rate || '0');
+                                        return (buyRate > 0 && enteredRate > 0 && enteredRate < buyRate * 1.1)
+                                            ? <p style={{ fontSize: '0.72rem', color: 'var(--color-warning)', marginTop: '0.2rem' }}>⚠ Rate below 110% of purchase cost (₹{(buyRate * 1.1).toFixed(2)}). Please verify.</p>
+                                            : null;
+                                    })()}
                                 </div>
                             </div>
 
@@ -463,9 +510,9 @@ export default function Sales() {
 
             {/* ── Payment Confirmation Modal ────────────────────────────────────── */}
             {confirmModal?.open && (
-                <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', overflowY: 'auto', zIndex: 60, padding: '1.5rem 1rem' }}
+                <div className="modal-overlay" style={{ zIndex: 60 }}
                     onClick={(e) => { if (e.target === e.currentTarget) setConfirmModal(null); }}>
-                    <div className="card" style={{ width: '100%', maxWidth: '400px', margin: '0 auto' }}>
+                    <div className="card" style={{ width: '100%', maxWidth: '400px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                             <h2 style={{ fontSize: '1.1rem' }}>Confirm Payment Received</h2>
                             <button onClick={() => setConfirmModal(null)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} /></button>
@@ -494,9 +541,9 @@ export default function Sales() {
 
             {/* ── Edit Invoice Modal (within 7 days) ───────────────────────────── */}
             {editModal?.open && (
-                <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', overflowY: 'auto', zIndex: 60, padding: '1.5rem 1rem' }}
+                <div className="modal-overlay" style={{ zIndex: 60 }}
                     onClick={(e) => { if (e.target === e.currentTarget) setEditModal(null); }}>
-                    <div className="card" style={{ width: '100%', maxWidth: '420px', margin: '0 auto' }}>
+                    <div className="card" style={{ width: '100%', maxWidth: '420px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
                             <h2 style={{ fontSize: '1.1rem' }}>Edit Invoice</h2>
                             <button onClick={() => setEditModal(null)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} /></button>

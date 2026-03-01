@@ -29,11 +29,12 @@ export default function Dashboard() {
         const loadDashboardData = async () => {
             if (!accessToken) return;
             try {
-                const [salesData, purchaseData, purchaseItemsData, saleItemsData] = await Promise.all([
-                    fetchSheetData(accessToken, 'Sales!A2:O'),
+                const [salesData, purchaseData, purchaseItemsData, saleItemsData, materialsData] = await Promise.all([
+                    fetchSheetData(accessToken, 'Sales!A2:P'),
                     fetchSheetData(accessToken, 'Purchases!A2:K'),
                     fetchSheetData(accessToken, 'Purchase_Items!A2:H'),
-                    fetchSheetData(accessToken, 'Sale_Items!A2:I')
+                    fetchSheetData(accessToken, 'Sale_Items!A2:I'),
+                    fetchSheetData(accessToken, 'Materials!A2:I'),
                 ]);
 
                 const today = new Date().toISOString().split('T')[0];
@@ -46,13 +47,15 @@ export default function Dashboard() {
                     if (row[12] !== 'Confirmed') pendingReceivables += amount;
                 });
 
-                // Inventory calculation
+                // Inventory: Opening stock (from Materials) + Purchases - Sales
                 let totalInward = 0;
                 let totalOutward = 0;
+                // Add opening stock from each material (col 4 = opening KG)
+                materialsData.forEach(mat => totalInward += parseFloat(mat[4] || '0'));
                 purchaseItemsData.forEach(row => totalInward += parseFloat(row[5] || '0'));
                 saleItemsData.forEach(row => totalOutward += parseFloat(row[5] || '0'));
                 const currentStock = Math.max(0, totalInward - totalOutward);
-                const health = currentStock > 1000 ? 'Good' : currentStock > 0 ? 'Low Stock' : 'Empty';
+                const health = currentStock > 2000 ? 'Good' : currentStock > 500 ? 'Low Stock' : currentStock > 0 ? 'Very Low' : 'Empty';
 
                 // Recent activity feed (last 5 combined)
                 const recentSales: RecentItem[] = salesData.slice(-4).reverse().map(r => ({
@@ -102,7 +105,7 @@ export default function Dashboard() {
             </div>
 
             {/* Stat Cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem', marginBottom: '2rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
                 {statCards.map(card => (
                     <div className="card" key={card.label}>
                         <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>{card.label}</p>
@@ -115,7 +118,7 @@ export default function Dashboard() {
             </div>
 
             {/* Quick Actions + Recent Activity */}
-            <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: '1.5rem' }}>
+            <div className="dashboard-bottom">
                 {/* Quick Actions */}
                 <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
                     <h2 style={{ fontSize: '0.9rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)', marginBottom: '0.25rem' }}>Quick Actions</h2>
@@ -167,7 +170,7 @@ export default function Dashboard() {
                                         <div>
                                             <p style={{ margin: 0, fontWeight: 600, fontSize: '0.875rem', color: 'var(--text-primary)' }}>{item.party}</p>
                                             <p style={{ margin: 0, fontSize: '0.75rem', color: 'var(--text-tertiary)' }}>
-                                                {item.type === 'sale' ? 'Sale' : 'Purchase'} · {item.label} · {item.date ? format(new Date(item.date), 'dd MMM') : '-'}
+                                                {item.type === 'sale' ? 'Sale' : 'Purchase'} · {item.label} · {item.date ? format(new Date(item.date), 'dd MMM, h:mm a') : '-'}
                                             </p>
                                         </div>
                                     </div>

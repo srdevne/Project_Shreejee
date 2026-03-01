@@ -43,7 +43,6 @@
 
   --transition-fast: 0.15s ease-in-out;
   --transition-normal: 0.25s ease-in-out;
-  height: 100%;
 }
 
 * {
@@ -313,7 +312,12 @@ p {
   border-radius: 2px;
 }
 
-/* Layout Responsive Styles */
+/* ══════════════════════════════════════════════════════════════
+   RESPONSIVE — Mobile-first approach
+   All rules below progressively enhance for larger screens
+═══════════════════════════════════════════════════════════════ */
+
+/* ── ≤768px: Tablet + Phone ── */
 @media (max-width: 768px) {
   .desktop-only {
     display: none !important;
@@ -327,67 +331,86 @@ p {
     flex-direction: column !important;
   }
 
-  /* Page content fills full width on mobile */
+  /* Page content padding */
   .page-content {
-    padding: 1rem !important;
+    padding: 0.875rem !important;
   }
 
-  /* Tables scroll horizontally and use smaller text */
+  /* Tables: scrollable, smaller text */
+  .table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
   th,
   td {
     padding: 0.5rem 0.6rem !important;
     font-size: 0.78rem !important;
+    white-space: nowrap;
   }
 
-  /* Page headers stack on small screens */
+  /* Page headers stack */
   .page-header-row {
     flex-direction: column !important;
     align-items: flex-start !important;
     gap: 0.75rem !important;
   }
-}
 
-/* ── Narrow phone: single-column form grids ── */
-@media (max-width: 520px) {
-
-  /* Modal card: prevent overflow, fill available width */
-  .card {
-    width: calc(100vw - 2rem) !important;
-    max-width: calc(100vw - 2rem) !important;
-    box-sizing: border-box !important;
+  /* Stat card grid: 2 per row on tablet */
+  .stat-card-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
   }
 
-  /* All 2-col grids inside modals → 1 col */
-  .card [style*="gridTemplateColumns"] {
+  /* Dashboard bottom section stacks */
+  .dashboard-bottom {
     grid-template-columns: 1fr !important;
   }
 
-  /* Ensure grid children don't span beyond 1 col */
-  .card [style*="gridColumn"] {
-    grid-column: 1 / -1 !important;
+  /* Recent activity card: compact */
+  .recent-activity-card {
+    max-width: 100% !important;
+  }
+}
+
+/* ── ≤600px: Small phone ── */
+@media (max-width: 600px) {
+
+  /* All cards: constrained width, no viewport overflow */
+  .card {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
   }
 
-  /* Table cells even more compact */
-  th,
-  td {
-    padding: 0.4rem 0.5rem !important;
-    font-size: 0.73rem !important;
+  /* Modal cards: tall but scrollable internally */
+  .modal-overlay>.card {
+    max-height: 88vh !important;
+    overflow-y: auto !important;
   }
 
-  /* Input fields full width */
+  /* Inputs full width */
   .input-field,
   .input-group {
     width: 100% !important;
     box-sizing: border-box !important;
   }
 
-  /* Buttons in action rows wrap */
+  /* Buttons: slightly smaller */
   .btn {
     font-size: 0.78rem !important;
     padding: 0.45rem 0.7rem !important;
   }
+
+  /* Table: very compact */
+  th,
+  td {
+    padding: 0.35rem 0.4rem !important;
+    font-size: 0.72rem !important;
+  }
 }
 
+
+/* ── ≥769px: Desktop only ── */
 @media (min-width: 769px) {
   .mobile-only {
     display: none !important;
@@ -432,4 +455,87 @@ tbody tr:last-child td {
 
 tbody tr:hover {
   background-color: #F9FAFB;
+}
+
+/* ── Modal overlay: centers short modals, scrolls tall ones ── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.55);
+  z-index: 50;
+  overflow-y: auto;
+  /* Inner content centered via flex on a min-height wrapper */
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 1.5rem 1rem;
+}
+
+/* The card inside a modal-overlay will be naturally centered because
+   the overlay is a flex column with padding. On tall forms it scrolls. */
+.modal-overlay>.card {
+  width: 100%;
+  margin: auto 0;
+  /* vertical centering when content is short */
+  flex-shrink: 0;
+}
+
+/* ── Dashboard bottom row: stacks on mobile ── */
+.dashboard-bottom {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 1.5rem;
+}
+
+@media (max-width: 768px) {
+  .dashboard-bottom {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ── Invoice A4 Print Styles ── */
+@media print {
+
+  /* Hide everything except the invoice */
+  body>* {
+    display: none !important;
+  }
+
+  #invoice-print-root {
+    display: block !important;
+  }
+
+  .invoice-print-area {
+    display: block !important;
+    position: static !important;
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0;
+    padding: 0;
+    background: white !important;
+    color: black !important;
+    font-size: 10pt;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Hide print toolbar, overlay backdrop, navigation */
+  .invoice-toolbar,
+  .invoice-modal-backdrop,
+  nav,
+  header,
+  aside,
+  .app-layout {
+    display: none !important;
+  }
+
+  /* Page break support */
+  .page-break {
+    page-break-before: always;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 10mm;
+  }
 }

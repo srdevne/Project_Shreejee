@@ -27,10 +27,9 @@ export default function Login() {
                 const userInfo = await res.json();
 
                 // 2. Fetch Config from the Google Sheet to verify access
-                // Note: For this to work, the sheet must be accessible by this user.
-                // If the owner creates the sheet, they must share it with the 'manager' emails.
                 const config = await fetchConfig(accessToken);
 
+                // ALLOWED_EMAILS: all emails that can log in (comma-separated)
                 const allowedEmailsStr = config['ALLOWED_EMAILS'] || '';
                 const allowedEmails = allowedEmailsStr.split(',').map((e: string) => e.trim().toLowerCase());
 
@@ -40,18 +39,21 @@ export default function Login() {
                     return;
                 }
 
-                // For MVP, we assign owner role to the first email in the allowed list, and manager to others.
-                // Or default everyone to owner if there's only one.
-                const isPrimaryOwner = allowedEmails.indexOf(userInfo.email.toLowerCase()) === 0;
+                // OWNER_EMAILS: emails with full Owner access (comma-separated)
+                // If not set, defaults to the first email in ALLOWED_EMAILS for backward-compatibility
+                const ownerEmailsStr = config['OWNER_EMAILS'] || allowedEmails[0];
+                const ownerEmails = ownerEmailsStr.split(',').map((e: string) => e.trim().toLowerCase());
+                const role = ownerEmails.includes(userInfo.email.toLowerCase()) ? 'owner' : 'manager';
 
                 login({
                     email: userInfo.email,
                     name: userInfo.name,
                     picture: userInfo.picture,
-                    role: isPrimaryOwner ? 'owner' : 'manager',
+                    role,
                 }, accessToken);
 
-                navigate('/');
+                // Redirect: owner → dashboard, manager → sales
+                navigate(role === 'owner' ? '/' : '/sales');
             } catch (err: any) {
                 console.error('Login error:', err);
                 if (err.message === 'UNAUTHORIZED') {

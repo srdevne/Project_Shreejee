@@ -15,7 +15,7 @@ const CO = {
     tagline: 'DEALERS IN: ALL TYPES OF PLASTIC RAW MATERIALS',
     office: '279, SICOF, Plot No. 69, M.I.D.C Area, Satpur, Nashik - 422 007.',
     reg: 'Silver Wood, Savarkar Nagar, Gangapur Road, Nashik - 422013.',
-    email: 'shreejeenterprises279@gmail.com',
+    email: 'shreejeeenterprises279@gmail.com',
     mob: '9890944818 / 9850063816',
     gstin: '27AAZPB1051B1Z2',
     bank: 'Saraswat Co. op. Bank, Mahatma Nagar Branch',
@@ -88,6 +88,7 @@ interface InvoiceData {
     cgst: string;
     sgst: string;
     taxRate: string;
+    invoiceUid: string;  // verifiable UID stored in col Q
     items: InvoiceItem[];
 }
 
@@ -113,7 +114,7 @@ export default function InvoicePrint({ invoiceNo, onClose }: { invoiceNo: string
             if (!accessToken) return;
             try {
                 const [salesData, itemsData, partiesData, matsData] = await Promise.all([
-                    fetchSheetData(accessToken, 'Sales!A2:P'),
+                    fetchSheetData(accessToken, 'Sales!A2:Q'),  // Q = invoice UID
                     fetchSheetData(accessToken, 'Sale_Items!A2:I'),
                     fetchSheetData(accessToken, 'Parties!A2:H'),
                     fetchSheetData(accessToken, 'Materials!A2:I'),
@@ -140,6 +141,7 @@ export default function InvoicePrint({ invoiceNo, onClose }: { invoiceNo: string
                     taxRate: items[0]?.taxRate || '0',
                     customerGstin: party ? (party[3] || '') : '',
                     customerAddress: party ? (party[6] || '') : '',
+                    invoiceUid: sr[16] || '',  // col Q
                     items,
                 });
             } catch (e) { console.error(e); }
@@ -231,8 +233,13 @@ GSTIN: ${CO.gstin} | 📞 ${CO.mob}`;
                 setBtMsg('📋 Invoice details copied to clipboard!');
             }
         } catch (err: any) {
-            if (err?.name !== 'AbortError') {
-                // User dismissed share sheet — not an error
+            if (err?.name === 'AbortError') {
+                // User dismissed share sheet — silent
+            } else if (err?.name === 'NotAllowedError') {
+                // iOS/browser context restriction—copy text fallback
+                try { await navigator.clipboard.writeText(textSummary); } catch { }
+                setBtMsg('⚠ Sharing blocked by browser. Invoice text copied to clipboard instead. On iOS, open in Safari for full sharing.');
+            } else {
                 setBtMsg(err?.message || 'Share failed.');
             }
         } finally {
@@ -283,12 +290,12 @@ GSTIN: ${CO.gstin} | 📞 ${CO.mob}`;
     while (printRows.length < 8) printRows.push({ materialName: '', hsnCode: '', bags: '', weight: '', rate: '', taxRate: '', amount: '' });
 
     return (
-        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.65)', zIndex: 70, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '1rem' }}>
-            <div style={{ backgroundColor: 'white', width: '100%', maxWidth: '780px', borderRadius: '8px', marginBottom: '1rem' }}>
+        <div className="invoice-modal-backdrop" style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.65)', zIndex: 70, overflowY: 'auto' }}>
+            <div id="invoice-print-root" style={{ width: '100%', maxWidth: '820px', margin: '0 auto', padding: '0.75rem' }}>
 
                 {/* ── Toolbar (no-print) ── */}
-                <div className="no-print" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.6rem 1rem', backgroundColor: '#f5f5f5', borderBottom: '1px solid #ddd', flexWrap: 'wrap', gap: '0.5rem', borderRadius: '8px 8px 0 0' }}>
-                    <span style={{ fontWeight: 600, fontSize: '0.875rem', color: '#555' }}>{invoice.invoiceNo} — Preview</span>
+                <div className="invoice-toolbar no-print" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.6rem 1rem', backgroundColor: '#1a1a1a', borderRadius: '8px', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <span style={{ fontWeight: 600, fontSize: '0.875rem', color: '#e0e0e0' }}>{invoice.invoiceNo} — Preview</span>
                     <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
                         {!btConnected
                             ? <button className="btn btn-secondary" style={{ fontSize: '0.78rem', padding: '0.3rem 0.65rem' }} onClick={handleBtConnect}><Bluetooth size={13} /> BT Print</button>
@@ -315,28 +322,33 @@ GSTIN: ${CO.gstin} | 📞 ${CO.mob}`;
                         <button className="btn btn-primary" style={{ fontSize: '0.8rem', padding: '0.35rem 0.8rem' }} onClick={() => window.print()}>
                             <Printer size={14} /> Print / PDF
                         </button>
-                        <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0.3rem' }}><X size={18} /></button>
+                        <button onClick={onClose} style={{
+                            background: 'white', border: '1px solid #ccc',
+                            borderRadius: '4px', cursor: 'pointer',
+                            padding: '0.3rem 0.5rem', color: '#111',
+                            display: 'flex', alignItems: 'center'
+                        }}><X size={18} /></button>
                     </div>
                     {btMsg && <p style={{ width: '100%', margin: 0, fontSize: '0.75rem', color: btMsg.startsWith('✅') || btMsg.startsWith('Connected') ? '#059669' : '#C62828' }}>{btMsg}</p>}
                 </div>
 
-                {/* ── Invoice Body (captured by html2canvas) ── */}
-                <div id="invoice-print" ref={invoiceRef} style={{ padding: '1.25rem 1.5rem', fontFamily: '"Times New Roman", Times, serif', fontSize: '0.82rem', color: '#111' }}>
+                {/* ── Invoice Body (captured by html2canvas + A4 print) ── */}
+                <div id="invoice-print" ref={invoiceRef}
+                    className="invoice-print-area"
+                    style={{ padding: '1.25rem 1.5rem', fontFamily: '"Times New Roman", Times, serif', fontSize: '0.82rem', color: '#111', backgroundColor: 'white', overflowX: 'hidden' }}>
 
-                    {/* Company Header */}
+                    {/* Company Header — centered, no competing elements on same row */}
                     <div style={{ textAlign: 'center', borderBottom: '3px double #8B0000', paddingBottom: '0.5rem', marginBottom: '0.4rem' }}>
                         <p style={{ margin: 0, fontSize: '0.72rem', color: '#444' }}>JAI MATA DI</p>
-                        <h1 style={{ margin: '0.1rem 0', fontSize: '1.6rem', fontWeight: 900, color: '#8B0000', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
+                        <h1 style={{ margin: '0.1rem 0', fontSize: '1.6rem', fontWeight: 900, color: '#8B0000', letterSpacing: '0.06em', textTransform: 'uppercase', textAlign: 'center' }}>
                             M/S. SHREEJEE ENTERPRISES
                         </h1>
-                        <p style={{ margin: '0.1rem auto', display: 'inline-block', padding: '0.15rem 1.25rem', border: '1.5px solid #8B0000', fontSize: '0.72rem', fontWeight: 700, color: '#8B0000', letterSpacing: '0.04em' }}>
+                        <p style={{ margin: '0.1rem auto 0.25rem', display: 'inline-block', padding: '0.15rem 1.25rem', border: '1.5px solid #8B0000', fontSize: '0.72rem', fontWeight: 700, color: '#8B0000', letterSpacing: '0.04em' }}>
                             DEALERS IN: ALL TYPES OF PLASTIC RAW MATERIALS
                         </p>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.3rem', fontSize: '0.7rem', color: '#333' }}>
-                            <span>📞 Mob.: {CO.mob}</span>
-                            <span>✉ {CO.email}</span>
-                        </div>
+                        {/* Contact row BELOW h1 so it doesn’t pull heading off-center */}
                         <div style={{ fontSize: '0.68rem', color: '#444', marginTop: '0.15rem' }}>
+                            <div>📞 Mob.: {CO.mob} &nbsp;&nbsp; ✉ {CO.email}</div>
                             <div>Office : {CO.office}</div>
                             <div>Reg Add : {CO.reg}</div>
                         </div>
@@ -507,6 +519,14 @@ GSTIN: ${CO.gstin} | 📞 ${CO.mob}`;
                             </tr>
                         </tbody>
                     </table>
+                    {/* UID Verification Strip */}
+                    {invoice.invoiceUid && (
+                        <div style={{ marginTop: '0.4rem', padding: '0.2rem 0.5rem', backgroundColor: '#f9f9f9', border: '1px dashed #bbb', borderRadius: '2px', textAlign: 'center' }}>
+                            <span style={{ fontSize: '0.62rem', color: '#888', fontFamily: 'monospace', letterSpacing: '0.05em' }}>
+                                VERIFICATION ID: {invoice.invoiceUid} &nbsp;···&nbsp; This number is recorded in Shreejee Enterprises’ system. Any invoice without a valid ID is a forgery.
+                            </span>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

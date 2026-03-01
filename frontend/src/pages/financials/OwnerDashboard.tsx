@@ -21,10 +21,14 @@ interface InventoryItem {
 export default function OwnerDashboard() {
     const { accessToken } = useAuth();
     const [isLoading, setIsLoading] = useState(true);
-    const [pnl, setPnl] = useState({ revenue: 0, purchases: 0, expenses: 0, grossProfit: 0, netProfit: 0 });
+    const [pnl, setPnl] = useState({
+        revenue: 0, purchases: 0, expenses: 0, grossProfit: 0, netProfit: 0,
+        realizedRevenue: 0, unrealizedRevenue: 0,
+        realizedProfit: 0, unrealizedProfit: 0,
+    });
     const [overdueInvoices, setOverdueInvoices] = useState<OverdueInvoice[]>([]);
     const [inventory, setInventory] = useState<InventoryItem[]>([]);
-    const [period, setPeriod] = useState<'month' | 'quarter' | 'all'>('month');
+    const [period, setPeriod] = useState<'month' | 'fy' | 'all'>('fy');
 
     useEffect(() => {
         const load = async () => {
@@ -41,22 +45,32 @@ export default function OwnerDashboard() {
                 ]);
 
                 const now = new Date();
+
+                // ── India Financial Year: April 1 → March 31 ──────────────────────
+                const currentFYStart = new Date(
+                    now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1,
+                    3, 1 // April = month index 3
+                );
                 const filterDate = (dateStr: string) => {
                     if (!dateStr) return false;
                     const d = new Date(dateStr);
                     if (period === 'month') return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-                    if (period === 'quarter') {
-                        const qStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
-                        return d >= qStart;
-                    }
-                    return true;
+                    if (period === 'fy') return d >= currentFYStart;
+                    return true; // 'all'
                 };
+                const fyLabel = `FY ${currentFYStart.getFullYear()}-${String(currentFYStart.getFullYear() + 1).slice(2)}`;
 
-                // --- Revenue & Gross Profit ---
+                // ── Revenue split: Realized (confirmed) vs Unrealized (pending) ──
                 let revenue = 0;
+                let realizedRevenue = 0;
+                let unrealizedRevenue = 0;
                 let costOfGoodsSold = 0;
+                let realizedCOGS = 0;
                 salesData.filter(r => filterDate(r[2])).forEach(sale => {
-                    revenue += parseFloat(sale[10] || '0');
+                    const amt = parseFloat(sale[10] || '0');
+                    revenue += amt;
+                    if (sale[12] === 'Confirmed') realizedRevenue += amt;
+                    else unrealizedRevenue += amt;
                 });
 
                 // Avg purchase cost per KG per material
@@ -69,20 +83,33 @@ export default function OwnerDashboard() {
                     matCost[matId] = (matCost[matId] || 0) + amount;
                     matTotalKg[matId] = (matTotalKg[matId] || 0) + kg;
                 });
+                // Also factor in opening stock cost from Materials sheet (col 7 = default purchase rate)
+                materialsData.forEach(mat => {
+                    const id = mat[0];
+                    const openKg = parseFloat(mat[4] || '0'); // opening stock KG
+                    const openRate = parseFloat(mat[6] || '0'); // default purchase rate
+                    if (openKg > 0 && openRate > 0) {
+                        matCost[id] = (matCost[id] || 0) + openKg * openRate;
+                        matTotalKg[id] = (matTotalKg[id] || 0) + openKg;
+                    }
+                });
                 const avgCostPerKg: Record<string, number> = {};
                 Object.keys(matCost).forEach(id => {
                     avgCostPerKg[id] = matTotalKg[id] ? matCost[id] / matTotalKg[id] : 0;
                 });
 
                 saleItemsData.filter(item => {
-                    // find the sale to check its date
                     const sale = salesData.find(s => s[0] === item[1]);
                     return sale ? filterDate(sale[2]) : false;
                 }).forEach(item => {
                     const matId = item[2];
                     const kg = parseFloat(item[5] || '0');
                     const avgCost = avgCostPerKg[matId] || 0;
-                    costOfGoodsSold += avgCost * kg;
+                    const c = avgCost * kg;
+                    costOfGoodsSold += c;
+                    // Find sale to check confirmation
+                    const sale = salesData.find(s => s[0] === item[1]);
+                    if (sale?.[12] === 'Confirmed') realizedCOGS += c;
                 });
 
                 // --- Expenses ---
@@ -99,8 +126,13 @@ export default function OwnerDashboard() {
 
                 const grossProfit = revenue - costOfGoodsSold;
                 const netProfit = grossProfit - expenses;
+                const realizedProfit = realizedRevenue - realizedCOGS;
+                const unrealizedProfit = unrealizedRevenue - (costOfGoodsSold - realizedCOGS);
 
-                setPnl({ revenue, purchases: purchaseSpend, expenses, grossProfit, netProfit });
+                // Store fyLabel in state to show in UI
+                (window as any).__fyLabel = fyLabel;
+
+                setPnl({ revenue, purchases: purchaseSpend, expenses, grossProfit, netProfit, realizedRevenue, unrealizedRevenue, realizedProfit, unrealizedProfit });
 
                 // --- Overdue Invoices (>30 days, unpaid) ---
                 const overdue: OverdueInvoice[] = salesData
@@ -110,7 +142,7 @@ export default function OwnerDashboard() {
                     .sort((a, b) => b.daysOverdue - a.daysOverdue);
                 setOverdueInvoices(overdue);
 
-                // --- Inventory per material ---
+                // ── Inventory: Opening Stock + Purchases - Sales (all-time, not period-filtered) ──
                 const inwardByMat: Record<string, { kg: number; bags: number }> = {};
                 const outwardByMat: Record<string, { kg: number; bags: number }> = {};
                 purchaseItemsData.forEach(item => {
@@ -127,9 +159,12 @@ export default function OwnerDashboard() {
                 });
                 const invItems: InventoryItem[] = materialsData.map(mat => {
                     const id = mat[0];
-                    const inKg = inwardByMat[id]?.kg || 0;
+                    // Opening stock from Materials master (set when material is created)
+                    const openKg = parseFloat(mat[4] || '0');
+                    const openBags = parseFloat(mat[3] || '0');
+                    const inKg = openKg + (inwardByMat[id]?.kg || 0);
+                    const inBags = openBags + (inwardByMat[id]?.bags || 0);
                     const outKg = outwardByMat[id]?.kg || 0;
-                    const inBags = inwardByMat[id]?.bags || 0;
                     const outBags = outwardByMat[id]?.bags || 0;
                     return { name: mat[1], stockKg: Math.max(0, inKg - outKg), stockBags: Math.max(0, inBags - outBags) };
                 }).filter(i => i.name);
@@ -155,20 +190,22 @@ export default function OwnerDashboard() {
                     </h1>
                     <p>Profit & Loss, Inventory & Overdue Payment Alerts.</p>
                 </div>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    {(['month', 'quarter', 'all'] as const).map(p => (
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    {(['month', 'fy', 'all'] as const).map(p => (
                         <button key={p} className={`btn ${period === p ? 'btn-primary' : 'btn-secondary'}`}
                             style={{ padding: '0.4rem 0.9rem', fontSize: '0.8rem' }} onClick={() => setPeriod(p)}>
-                            {p === 'month' ? 'This Month' : p === 'quarter' ? 'This Quarter' : 'All Time'}
+                            {p === 'month' ? 'This Month'
+                                : p === 'fy' ? `FY ${new Date().getMonth() >= 3 ? new Date().getFullYear() : new Date().getFullYear() - 1}-${String((new Date().getMonth() >= 3 ? new Date().getFullYear() : new Date().getFullYear() - 1) + 1).slice(2)}`
+                                    : 'All Time'}
                         </button>
                     ))}
                 </div>
             </div>
 
             {/* P&L Summary Cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem', marginBottom: '1rem' }}>
                 {[
-                    { label: 'Revenue', value: pnl.revenue, color: 'var(--color-primary)', icon: <DollarSign size={18} /> },
+                    { label: 'Total Revenue', value: pnl.revenue, color: 'var(--color-primary)', icon: <DollarSign size={18} /> },
                     { label: 'Purchase Cost', value: pnl.purchases, color: 'var(--text-secondary)', icon: <Package size={18} /> },
                     { label: 'Expenses', value: pnl.expenses, color: 'var(--color-danger)', icon: <DollarSign size={18} /> },
                     { label: 'Gross Profit', value: pnl.grossProfit, color: pnl.grossProfit >= 0 ? 'var(--color-secondary)' : 'var(--color-danger)', icon: <TrendingUp size={18} /> },
@@ -180,6 +217,40 @@ export default function OwnerDashboard() {
                         <p style={{ fontSize: '1.4rem', fontWeight: 700, color: card.color }}>{isLoading ? '…' : fmt(card.value)}</p>
                     </div>
                 ))}
+            </div>
+
+            {/* Realized vs Unrealized */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+                <div className="card" style={{ borderLeft: '4px solid var(--color-secondary)' }}>
+                    <p style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-secondary)', marginBottom: '0.5rem' }}>✅ Realized P&L (Payment Confirmed)</p>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                            <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Revenue Received</p>
+                            <p style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--color-secondary)' }}>{isLoading ? '…' : fmt(pnl.realizedRevenue)}</p>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                            <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Profit Booked</p>
+                            <p style={{ fontSize: '1.2rem', fontWeight: 700, color: pnl.realizedProfit >= 0 ? 'var(--color-secondary)' : 'var(--color-danger)' }}>
+                                {isLoading ? '…' : fmt(pnl.realizedProfit)}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+                <div className="card" style={{ borderLeft: '4px solid var(--color-warning)' }}>
+                    <p style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-warning)', marginBottom: '0.5rem' }}>⏳ Unrealized P&L (Payment Pending)</p>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <div>
+                            <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Revenue Billed</p>
+                            <p style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--color-warning)' }}>{isLoading ? '…' : fmt(pnl.unrealizedRevenue)}</p>
+                        </div>
+                        <div style={{ textAlign: 'right' }}>
+                            <p style={{ fontSize: '0.78rem', color: 'var(--text-secondary)' }}>Profit Estimated</p>
+                            <p style={{ fontSize: '1.2rem', fontWeight: 700, color: pnl.unrealizedProfit >= 0 ? 'var(--color-warning)' : 'var(--color-danger)' }}>
+                                {isLoading ? '…' : fmt(pnl.unrealizedProfit)}
+                            </p>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.5rem' }}>

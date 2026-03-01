@@ -240,7 +240,7 @@ export default function Purchases() {
                                         ) : <span style={{ color: 'var(--text-tertiary)', fontSize: '0.78rem' }}>–</span>}
                                     </td>
                                     <td>
-                                        {row[8] !== 'Paid' && (
+                                        {row[8] !== 'to be paid' && (
                                             <button onClick={() => setConfirmModal({ open: true, rowIdx: idx, purchaseId: row[0], supplier: row[4] })}
                                                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-secondary)', display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.78rem' }}>
                                                 <CheckCircle size={14} /> Paid
@@ -256,9 +256,8 @@ export default function Purchases() {
 
             {/* ── New Purchase Modal ───────────────────────────────────────────── */}
             {isModalOpen && (
-                <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', overflowY: 'auto', zIndex: 50, padding: '1.5rem 1rem' }}
-                    onClick={(e) => { if (e.target === e.currentTarget) setIsModalOpen(false); }}>
-                    <div className="card" style={{ width: '100%', maxWidth: '540px', margin: '0 auto' }}>
+                <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setIsModalOpen(false); }}>
+                    <div className="card" style={{ width: '100%', maxWidth: '540px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                             <h2 style={{ fontSize: '1.1rem' }}>Record Incoming Purchase</h2>
                             <button onClick={() => setIsModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} /></button>
