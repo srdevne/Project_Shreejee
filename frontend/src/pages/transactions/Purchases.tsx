@@ -240,7 +240,7 @@ export default function Purchases() {
                                         ) : <span style={{ color: 'var(--text-tertiary)', fontSize: '0.78rem' }}>–</span>}
                                     </td>
                                     <td>
-                                        {row[8] !== 'to be paid' && (
+                                        {row[8] !== 'Paid' && (
                                             <button onClick={() => setConfirmModal({ open: true, rowIdx: idx, purchaseId: row[0], supplier: row[4] })}
                                                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-secondary)', display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.78rem' }}>
                                                 <CheckCircle size={14} /> Paid
