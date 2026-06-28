@@ -319,7 +319,6 @@ export default function Purchases() {
                                     ref={cameraInputRef}
                                     type="file"
                                     accept="image/*"
-                                    capture="environment"
                                     multiple
                                     style={{ display: 'none' }}
                                     onChange={handlePhotoCapture}
@@ -364,7 +363,8 @@ export default function Purchases() {
 
             {/* ── Payment Confirmation Modal ────────────────────────────────────── */}
             {confirmModal?.open && (
-                <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 60, padding: '1rem' }}>
+                <div className="modal-overlay" style={{ zIndex: 60 }}
+                    onClick={(e) => { if (e.target === e.currentTarget) setConfirmModal(null); }}>
                     <div className="card" style={{ width: '100%', maxWidth: '400px' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                             <h2 style={{ fontSize: '1.1rem' }}>Confirm Payment to Vendor</h2>

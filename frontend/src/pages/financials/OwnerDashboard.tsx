@@ -129,9 +129,6 @@ export default function OwnerDashboard() {
                 const realizedProfit = realizedRevenue - realizedCOGS;
                 const unrealizedProfit = unrealizedRevenue - (costOfGoodsSold - realizedCOGS);
 
-                // Store fyLabel in state to show in UI
-                (window as any).__fyLabel = fyLabel;
-
                 setPnl({ revenue, purchases: purchaseSpend, expenses, grossProfit, netProfit, realizedRevenue, unrealizedRevenue, realizedProfit, unrealizedProfit });
 
                 // --- Overdue Invoices (>30 days, unpaid) ---

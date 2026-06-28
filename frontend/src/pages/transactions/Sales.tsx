@@ -306,21 +306,21 @@ export default function Sales() {
                                             </span>
                                         </td>
                                         <td>
-                                            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                                            <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'nowrap', alignItems: 'center' }}>
                                                 <button onClick={() => setPrintInvoiceNo(row[0])}
-                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.78rem' }}>
-                                                    <FileText size={13} /> View
+                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>
+                                                    <FileText size={13} /><span className="desktop-only">View</span>
                                                 </button>
                                                 {row[12] !== 'Confirmed' && (
                                                     <button onClick={() => setConfirmModal({ open: true, rowIdx: idx, invoiceNo: row[0] })}
-                                                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-secondary)', display: 'flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.78rem' }}>
-                                                        <CheckCircle size={14} /> Confirm
+                                                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-secondary)', display: 'flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>
+                                                        <CheckCircle size={14} /><span className="desktop-only">Confirm</span>
                                                     </button>
                                                 )}
                                                 {canEdit && (
                                                     <button onClick={() => openEditModal(idx, row)}
-                                                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.78rem' }}>
-                                                        <Pencil size={14} /> Edit
+                                                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>
+                                                        <Pencil size={14} /><span className="desktop-only">Edit</span>
                                                     </button>
                                                 )}
                                             </div>
@@ -452,8 +452,8 @@ export default function Sales() {
                         {lineItems.length > 0 && (
                             <div>
                                 <p style={{ fontWeight: 600, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>Invoice Items ({lineItems.length})</p>
-                                <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
-                                    <table style={{ fontSize: '0.82rem' }}>
+                                <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                                    <table style={{ fontSize: '0.82rem', minWidth: '420px' }}>
                                         <thead>
                                             <tr>
                                                 <th>Material</th>

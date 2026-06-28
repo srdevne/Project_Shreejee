@@ -162,6 +162,10 @@ export default function InvoicePrint({ invoiceNo, onClose }: { invoiceNo: string
         setIsSharing(true);
         setBtMsg('');
 
+        // Scroll to top so html2canvas captures from origin, not mid-scroll
+        window.scrollTo(0, 0);
+        invoiceRef.current.scrollIntoView({ block: 'start', behavior: 'instant' } as any);
+
         // Build a compact text fallback (WhatsApp-friendly)
         const subTot = invoice.items.reduce((s, i) => s + parseFloat(i.amount || '0'), 0);
         const grandTot = parseFloat(invoice.grandTotal || '0');
@@ -290,52 +294,56 @@ GSTIN: ${CO.gstin} | 📞 ${CO.mob}`;
     while (printRows.length < 8) printRows.push({ materialName: '', hsnCode: '', bags: '', weight: '', rate: '', taxRate: '', amount: '' });
 
     return (
-        <div className="invoice-modal-backdrop" style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.65)', zIndex: 70, overflowY: 'auto' }}>
-            <div id="invoice-print-root" style={{ width: '100%', maxWidth: '820px', margin: '0 auto', padding: '0.75rem' }}>
+        <div className="invoice-modal-backdrop" style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.65)', zIndex: 70, overflowX: 'auto', overflowY: 'auto' }}>
+            <div id="invoice-print-root" style={{ width: '100%', maxWidth: '820px', margin: '0 auto', padding: '0.75rem', minWidth: '320px' }}>
 
                 {/* ── Toolbar (no-print) ── */}
-                <div className="invoice-toolbar no-print" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.6rem 1rem', backgroundColor: '#1a1a1a', borderRadius: '8px', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-                    <span style={{ fontWeight: 600, fontSize: '0.875rem', color: '#e0e0e0' }}>{invoice.invoiceNo} — Preview</span>
-                    <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                <div className="invoice-toolbar no-print" style={{ backgroundColor: '#1a1a1a', borderRadius: '8px', marginBottom: '0.5rem', padding: '0.5rem 0.75rem' }}>
+                    {/* Row 1: Title + Close */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                        <span style={{ fontWeight: 600, fontSize: '0.875rem', color: '#e0e0e0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, marginRight: '0.5rem' }}>
+                            {invoice.invoiceNo} — Preview
+                        </span>
+                        <button onClick={onClose} style={{
+                            background: 'rgba(255,255,255,0.12)', border: 'none',
+                            borderRadius: '4px', cursor: 'pointer',
+                            padding: '0.25rem 0.4rem', color: '#fff',
+                            display: 'flex', alignItems: 'center', flexShrink: 0
+                        }}><X size={16} /></button>
+                    </div>
+                    {/* Row 2: Action buttons */}
+                    <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', alignItems: 'center' }}>
                         {!btConnected
-                            ? <button className="btn btn-secondary" style={{ fontSize: '0.78rem', padding: '0.3rem 0.65rem' }} onClick={handleBtConnect}><Bluetooth size={13} /> BT Print</button>
+                            ? <button className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem' }} onClick={handleBtConnect}><Bluetooth size={13} /> BT Print</button>
                             : <>
-                                <button className="btn btn-secondary" style={{ fontSize: '0.78rem', padding: '0.3rem 0.65rem', color: '#059669' }} onClick={handleBtPrint} disabled={btPrinting}>
+                                <button className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.3rem 0.6rem', color: '#059669' }} onClick={handleBtPrint} disabled={btPrinting}>
                                     {btPrinting ? <Loader size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <BluetoothConnected size={13} />}
                                     {btPrinting ? 'Printing…' : 'Print Receipt'}
                                 </button>
-                                <button className="btn btn-secondary" style={{ fontSize: '0.78rem', padding: '0.3rem 0.5rem' }} onClick={() => printTestPage().catch(e => setBtMsg(e.message))}>Test</button>
-                                <button className="btn btn-secondary" style={{ fontSize: '0.78rem', padding: '0.3rem 0.5rem', color: '#C62828' }} onClick={() => { disconnectPrinter(); setBtConnected(false); }}><X size={11} /></button>
+                                <button className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.3rem 0.5rem' }} onClick={() => printTestPage().catch(e => setBtMsg(e.message))}>Test</button>
+                                <button className="btn btn-secondary" style={{ fontSize: '0.75rem', padding: '0.3rem 0.5rem', color: '#C62828' }} onClick={() => { disconnectPrinter(); setBtConnected(false); }}><X size={11} /></button>
                             </>
                         }
                         <button
                             className="btn"
-                            style={{ fontSize: '0.8rem', padding: '0.35rem 0.8rem', backgroundColor: '#25D366', color: 'white', border: 'none', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+                            style={{ fontSize: '0.75rem', padding: '0.3rem 0.7rem', backgroundColor: '#25D366', color: 'white', border: 'none', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
                             onClick={handleShare}
                             disabled={isSharing}
                         >
-                            {isSharing
-                                ? <Loader size={14} style={{ animation: 'spin 1s linear infinite' }} />
-                                : <Share2 size={14} />}
+                            {isSharing ? <Loader size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Share2 size={13} />}
                             {isSharing ? 'Preparing…' : 'Share'}
                         </button>
-                        <button className="btn btn-primary" style={{ fontSize: '0.8rem', padding: '0.35rem 0.8rem' }} onClick={() => window.print()}>
-                            <Printer size={14} /> Print / PDF
+                        <button className="btn btn-primary" style={{ fontSize: '0.75rem', padding: '0.3rem 0.7rem' }} onClick={() => window.print()}>
+                            <Printer size={13} /> Print / PDF
                         </button>
-                        <button onClick={onClose} style={{
-                            background: 'white', border: '1px solid #ccc',
-                            borderRadius: '4px', cursor: 'pointer',
-                            padding: '0.3rem 0.5rem', color: '#111',
-                            display: 'flex', alignItems: 'center'
-                        }}><X size={18} /></button>
                     </div>
-                    {btMsg && <p style={{ width: '100%', margin: 0, fontSize: '0.75rem', color: btMsg.startsWith('✅') || btMsg.startsWith('Connected') ? '#059669' : '#C62828' }}>{btMsg}</p>}
+                    {btMsg && <p style={{ margin: '0.3rem 0 0', fontSize: '0.72rem', color: btMsg.startsWith('✅') || btMsg.startsWith('Connected') ? '#059669' : btMsg.startsWith('📋') ? '#059669' : '#C62828' }}>{btMsg}</p>}
                 </div>
 
                 {/* ── Invoice Body (captured by html2canvas + A4 print) ── */}
                 <div id="invoice-print" ref={invoiceRef}
                     className="invoice-print-area"
-                    style={{ padding: '1.25rem 1.5rem', fontFamily: '"Times New Roman", Times, serif', fontSize: '0.82rem', color: '#111', backgroundColor: 'white', overflowX: 'hidden' }}>
+                    style={{ padding: '1.25rem 1.5rem', fontFamily: '"Times New Roman", Times, serif', fontSize: '0.82rem', color: '#111', backgroundColor: 'white' }}>
 
                     {/* Company Header — centered, no competing elements on same row */}
                     <div style={{ textAlign: 'center', borderBottom: '3px double #8B0000', paddingBottom: '0.5rem', marginBottom: '0.4rem' }}>
