@@ -113,11 +113,11 @@ export default function Purchases() {
         setLineItems(prev => prev.filter((_, i) => i !== idx));
     };
 
-    const purchaseTotals = lineItems.reduce((acc, item) => ({
-        subTotal: acc.subTotal + item.amount,
-        taxTotal: acc.taxTotal + item.taxAmount,
-        grandTotal: acc.grandTotal + item.amount + item.taxAmount
-    }), { subTotal: 0, taxTotal: 0, grandTotal: 0 });
+    const subTotal = lineItems.reduce((sum, item) => sum + item.amount, 0);
+    const rawTaxTotal = lineItems.reduce((sum, item) => sum + item.taxAmount, 0);
+    const taxTotal = Math.round(rawTaxTotal);
+    const grandTotal = Math.round(subTotal + taxTotal);
+    const purchaseTotals = { subTotal, taxTotal, grandTotal };
 
     // ── Photo handling ──────────────────────────────────────────────────────────
     const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
