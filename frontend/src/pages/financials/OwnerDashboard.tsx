@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { TrendingUp, AlertTriangle, Package, DollarSign } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { fetchSheetData } from '../../services/googleSheets';
 import { format, differenceInDays } from 'date-fns';
+import { formatBagInventory } from '../../services/materialsHelper';
 
 interface OverdueInvoice {
     invoiceNo: string;
@@ -292,10 +292,9 @@ export default function OwnerDashboard() {
                                     <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0', borderBottom: i < inventory.length - 1 ? '1px solid var(--border-color)' : 'none' }}>
                                         <span style={{ fontWeight: 500, fontSize: '0.875rem' }}>{item.name}</span>
                                         <div style={{ textAlign: 'right' }}>
-                                            <span className={`badge ${item.stockKg <= 0 ? 'badge-danger' : item.stockKg < 500 ? 'badge-warning' : 'badge-success'}`}>
-                                                {item.stockKg <= 0 ? 'Out of Stock' : `${item.stockKg.toFixed(0)} KG`}
+                                            <span className={`badge ${item.stockKg <= 0 ? 'badge-danger' : item.stockKg < 250 ? 'badge-warning' : 'badge-success'}`}>
+                                                {formatBagInventory(item.stockKg)}
                                             </span>
-                                            {item.stockBags > 0 && <span style={{ fontSize: '0.75rem', color: 'var(--text-tertiary)', marginLeft: '0.4rem' }}>{item.stockBags.toFixed(0)} bags</span>}
                                         </div>
                                     </div>
                                 ))}

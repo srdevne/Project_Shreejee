@@ -3,12 +3,14 @@ import { ShoppingCart, Plus, X, CheckCircle, Camera, ImageIcon, Loader } from 'l
 import { useAuth } from '../../contexts/AuthContext';
 import { fetchSheetData, appendRow, updateRow, uploadFileToDrive } from '../../services/googleSheets';
 import { format } from 'date-fns';
+import { getLatestBuyPrices, formatBagInventory } from '../../services/materialsHelper';
 
 export default function Purchases() {
     const { accessToken } = useAuth();
     const [purchases, setPurchases] = useState<any[]>([]);
     const [parties, setParties] = useState<any[]>([]);
     const [materials, setMaterials] = useState<any[]>([]);
+    const [latestBuyPrices, setLatestBuyPrices] = useState<Record<string, number>>({});
     const [isLoading, setIsLoading] = useState(true);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -38,14 +40,19 @@ export default function Purchases() {
         if (!accessToken) return;
         setIsLoading(true);
         try {
-            const [purchasesData, partiesData, materialsData] = await Promise.all([
+            const [purchasesData, purchaseItemsData, partiesData, materialsData] = await Promise.all([
                 fetchSheetData(accessToken, 'Purchases!A2:L'),
+                fetchSheetData(accessToken, 'Purchase_Items!A2:H'),
                 fetchSheetData(accessToken, 'Parties!A2:H'),
-                fetchSheetData(accessToken, 'Materials!A2:I')
+                fetchSheetData(accessToken, 'Materials!A1:Z')
             ]);
             setPurchases(purchasesData);
             setParties(partiesData.filter(p => p[2] !== 'Customer' && p[7] !== 'Inactive'));
-            setMaterials(materialsData);
+            if (materialsData.length > 0) {
+                setMaterials(materialsData.slice(1));
+            }
+            const buyPrices = getLatestBuyPrices(purchasesData, purchaseItemsData);
+            setLatestBuyPrices(buyPrices);
         } catch (error) {
             console.error('Failed to load purchases data', error);
         } finally {
@@ -57,7 +64,12 @@ export default function Purchases() {
 
     const handleMaterialChange = (matId: string) => {
         const mat = materials.find(m => m[0] === matId);
-        setFormData(prev => ({ ...prev, materialId: matId, rate: mat ? mat[6] : '' }));
+        const latestPrice = latestBuyPrices[matId];
+        setFormData(prev => ({
+            ...prev,
+            materialId: matId,
+            rate: latestPrice !== undefined ? String(latestPrice) : (mat ? mat[6] : '')
+        }));
     };
 
     // ── Photo handling ──────────────────────────────────────────────────────────
@@ -284,7 +296,14 @@ export default function Purchases() {
                                     <label className="input-label">Material *</label>
                                     <select required className="input-field" value={formData.materialId} onChange={e => handleMaterialChange(e.target.value)}>
                                         <option value="">-- Select Material --</option>
-                                        {materials.map(m => <option key={m[0]} value={m[0]}>{m[1]}</option>)}
+                                        {materials.map(m => {
+                                            const stockKg = parseFloat(m[9] || '0');
+                                            return (
+                                                <option key={m[0]} value={m[0]}>
+                                                    {m[1]} {stockKg > 0 ? `(Stock: ${formatBagInventory(stockKg)})` : '(Out of Stock)'}
+                                                </option>
+                                            );
+                                        })}
                                     </select>
                                 </div>
                                 <div className="input-group">

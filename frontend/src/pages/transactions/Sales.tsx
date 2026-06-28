@@ -5,6 +5,7 @@ import { fetchSheetData, appendRow, updateRow, getNextInvoiceNumber } from '../.
 import { logNotification } from '../../services/notifications';
 import { format, differenceInDays } from 'date-fns';
 import InvoicePrint from './InvoicePrint';
+import { getSellingPriceForMonth, getLatestBuyPrices, formatBagInventory } from '../../services/materialsHelper';
 
 const ORDER_TYPES = ['Verbal / In-Person', 'Phone Call', 'WhatsApp / Message', 'Email', 'Purchase Order (Written)', 'Standing Order'];
 
@@ -24,6 +25,8 @@ export default function Sales() {
     const [sales, setSales] = useState<any[]>([]);
     const [parties, setParties] = useState<any[]>([]);
     const [materials, setMaterials] = useState<any[]>([]);
+    const [materialHeaders, setMaterialHeaders] = useState<string[]>([]);
+    const [latestBuyPrices, setLatestBuyPrices] = useState<Record<string, number>>({});
     const [isLoading, setIsLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -56,14 +59,21 @@ export default function Sales() {
         if (!accessToken) return;
         setIsLoading(true);
         try {
-            const [salesData, partiesData, materialsData] = await Promise.all([
+            const [salesData, purchasesData, purchaseItemsData, partiesData, materialsData] = await Promise.all([
                 fetchSheetData(accessToken, 'Sales!A2:P'),   // col P = order type
+                fetchSheetData(accessToken, 'Purchases!A2:L'),
+                fetchSheetData(accessToken, 'Purchase_Items!A2:H'),
                 fetchSheetData(accessToken, 'Parties!A2:H'),
-                fetchSheetData(accessToken, 'Materials!A2:I')
+                fetchSheetData(accessToken, 'Materials!A1:Z')
             ]);
             setSales(salesData);
             setParties(partiesData.filter(p => p[2] !== 'Supplier' && p[7] !== 'Inactive'));
-            setMaterials(materialsData);
+            if (materialsData.length > 0) {
+                setMaterialHeaders(materialsData[0]);
+                setMaterials(materialsData.slice(1));
+            }
+            const buyPrices = getLatestBuyPrices(purchasesData, purchaseItemsData);
+            setLatestBuyPrices(buyPrices);
         } catch (error) {
             console.error('Failed to load sales data', error);
         } finally {
@@ -103,7 +113,9 @@ export default function Sales() {
 
     const handleMaterialSelect = (matId: string) => {
         const mat = materials.find(m => m[0] === matId);
-        setCurrentItem(prev => ({ ...prev, materialId: matId, rate: mat ? mat[7] : '' }));
+        const transactionMonth = formData.date.slice(0, 7);
+        const sellRate = mat ? getSellingPriceForMonth(mat, materialHeaders, transactionMonth) : 0;
+        setCurrentItem(prev => ({ ...prev, materialId: matId, rate: sellRate > 0 ? String(sellRate) : '' }));
     };
 
     const addLineItem = () => {
@@ -392,7 +404,14 @@ export default function Sales() {
                                 <label className="input-label">Material</label>
                                 <select className="input-field" value={currentItem.materialId} onChange={e => handleMaterialSelect(e.target.value)}>
                                     <option value="">-- Select Material --</option>
-                                    {materials.map(m => <option key={m[0]} value={m[0]}>{m[1]}</option>)}
+                                    {materials.map(m => {
+                                        const stockKg = parseFloat(m[9] || '0');
+                                        return (
+                                            <option key={m[0]} value={m[0]}>
+                                                {m[1]} {stockKg > 0 ? `(Stock: ${formatBagInventory(stockKg)})` : '(Out of Stock)'}
+                                            </option>
+                                        );
+                                    })}
                                 </select>
                             </div>
 
@@ -410,7 +429,9 @@ export default function Sales() {
                                     <label className="input-label">Rate/KG (&#8377;)
                                         {(() => {
                                             const mat = materials.find(m => m[0] === currentItem.materialId);
-                                            return mat?.[7] ? <span style={{ fontWeight: 400, color: 'var(--text-tertiary)', marginLeft: '0.3rem' }}>(: ₹{mat[7]})</span> : null;
+                                            if (!mat) return null;
+                                            const sellRate = getSellingPriceForMonth(mat, materialHeaders, formData.date.slice(0, 7));
+                                            return sellRate > 0 ? <span style={{ fontWeight: 400, color: 'var(--text-tertiary)', marginLeft: '0.3rem' }}>(: ₹{sellRate.toFixed(2)})</span> : null;
                                         })()}
                                     </label>
                                     <input type="number" step="0.01" className="input-field"
@@ -419,17 +440,21 @@ export default function Sales() {
                                         placeholder="0.00"
                                         style={(() => {
                                             const mat = materials.find(m => m[0] === currentItem.materialId);
-                                            const buyRate = parseFloat(mat?.[6] || '0');
+                                            if (!mat) return {};
+                                            const latestBuy = latestBuyPrices[mat[0]];
+                                            const buyRate = latestBuy !== undefined ? latestBuy : parseFloat(mat[6] || '0');
                                             const enteredRate = parseFloat(currentItem.rate || '0');
                                             return (buyRate > 0 && enteredRate > 0 && enteredRate < buyRate * 1.1)
                                                 ? { borderColor: 'var(--color-warning)', backgroundColor: 'rgba(245,158,11,0.06)' } : {};
                                         })()} />
                                     {(() => {
                                         const mat = materials.find(m => m[0] === currentItem.materialId);
-                                        const buyRate = parseFloat(mat?.[6] || '0');
+                                        if (!mat) return null;
+                                        const latestBuy = latestBuyPrices[mat[0]];
+                                        const buyRate = latestBuy !== undefined ? latestBuy : parseFloat(mat[6] || '0');
                                         const enteredRate = parseFloat(currentItem.rate || '0');
                                         return (buyRate > 0 && enteredRate > 0 && enteredRate < buyRate * 1.1)
-                                            ? <p style={{ fontSize: '0.72rem', color: 'var(--color-warning)', marginTop: '0.2rem' }}>⚠ Rate below 110% of purchase cost (₹{(buyRate * 1.1).toFixed(2)}). Please verify.</p>
+                                            ? <p style={{ fontSize: '0.72rem', color: 'var(--color-warning)', marginTop: '0.2rem' }}>⚠ Rate below 110% of latest purchase cost (₹{(buyRate * 1.1).toFixed(2)}). Please verify.</p>
                                             : null;
                                     })()}
                                 </div>

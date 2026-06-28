@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchSheetData } from '../services/googleSheets';
 import { format } from 'date-fns';
+import { formatBagInventory } from '../services/materialsHelper';
 
 interface RecentItem {
     type: 'sale' | 'purchase';
@@ -90,7 +91,7 @@ export default function Dashboard() {
         },
         {
             label: 'Inventory Health', value: stats.inventoryHealth,
-            badge: `${stats.totalStockKg.toLocaleString('en-IN', { maximumFractionDigits: 0 })} KG`,
+            badge: formatBagInventory(stats.totalStockKg),
             badgeClass: stats.totalStockKg > 1000 ? 'badge-success' : stats.totalStockKg > 0 ? 'badge-warning' : 'badge-danger',
             color: 'var(--color-secondary)'
         },
