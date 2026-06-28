@@ -31,14 +31,45 @@ export default function Materials() {
         if (!accessToken) return;
         setIsLoading(true);
         try {
-            const [purchasesData, purchaseItemsData, materialsData] = await Promise.all([
+            const [purchasesData, purchaseItemsData, _salesData, saleItemsData, materialsData] = await Promise.all([
                 fetchSheetData(accessToken, 'Purchases!A2:L'),
                 fetchSheetData(accessToken, 'Purchase_Items!A2:H'),
+                fetchSheetData(accessToken, 'Sales!A2:P'),
+                fetchSheetData(accessToken, 'Sale_Items!A2:I'),
                 fetchSheetData(accessToken, 'Materials!A1:Z')
             ]);
             if (materialsData.length > 0) {
                 setHeaders(materialsData[0]);
-                setMaterials(materialsData.slice(1));
+                
+                // Calculate dynamic stock for each material
+                const inwardMap: Record<string, number> = {};
+                purchaseItemsData.forEach((item: any) => {
+                    const matId = item[2];
+                    inwardMap[matId] = (inwardMap[matId] || 0) + parseFloat(item[5] || '0');
+                });
+                
+                const outwardMap: Record<string, number> = {};
+                saleItemsData.forEach((item: any) => {
+                    const matId = item[2];
+                    outwardMap[matId] = (outwardMap[matId] || 0) + parseFloat(item[5] || '0');
+                });
+
+                const updatedMaterials = materialsData.slice(1).map((row: any) => {
+                    const openBags = parseFloat(row[3] || '0');
+                    const openKg = parseFloat(row[4] || '0');
+                    const totalOpenKg = (openBags * 25) + openKg;
+                    const inKg = inwardMap[row[0]] || 0;
+                    const outKg = outwardMap[row[0]] || 0;
+                    const remainingKg = Math.max(0, totalOpenKg + inKg - outKg);
+                    
+                    // Replace index 9 (liveKg) and index 10 (liveBags) with frontend calculations
+                    const newRow = [...row];
+                    newRow[9] = String(remainingKg);
+                    newRow[10] = String(Math.floor(remainingKg / 25));
+                    return newRow;
+                });
+                
+                setMaterials(updatedMaterials);
             }
             const buyPrices = getLatestBuyPrices(purchasesData, purchaseItemsData);
             setLatestBuyPrices(buyPrices);

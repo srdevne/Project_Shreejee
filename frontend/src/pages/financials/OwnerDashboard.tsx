@@ -138,31 +138,28 @@ export default function OwnerDashboard() {
                     .sort((a: any, b: any) => b.daysOverdue - a.daysOverdue);
                 setOverdueInvoices(overdue);
 
-                // ── Inventory: Opening Stock + Purchases - Sales (all-time, not period-filtered) ──
-                const inwardByMat: Record<string, { kg: number; bags: number }> = {};
-                const outwardByMat: Record<string, { kg: number; bags: number }> = {};
+                // ── Inventory: (Opening Bags * 25 + Opening KG) + Inward KG - Outward KG ──
+                const inwardByMat: Record<string, number> = {};
+                const outwardByMat: Record<string, number> = {};
                 purchaseItemsData.forEach((item: any) => {
                     const id = item[2];
-                    if (!inwardByMat[id]) inwardByMat[id] = { kg: 0, bags: 0 };
-                    inwardByMat[id].kg += parseFloat(item[5] || '0');
-                    inwardByMat[id].bags += parseFloat(item[4] || '0');
+                    inwardByMat[id] = (inwardByMat[id] || 0) + parseFloat(item[5] || '0');
                 });
                 saleItemsData.forEach((item: any) => {
                     const id = item[2];
-                    if (!outwardByMat[id]) outwardByMat[id] = { kg: 0, bags: 0 };
-                    outwardByMat[id].kg += parseFloat(item[5] || '0');
-                    outwardByMat[id].bags += parseFloat(item[4] || '0');
+                    outwardByMat[id] = (outwardByMat[id] || 0) + parseFloat(item[5] || '0');
                 });
                 const invItems: InventoryItem[] = materialsData.map((mat: any) => {
                     const id = mat[0];
-                    // Opening stock from Materials master (set when material is created)
-                    const openKg = parseFloat(mat[4] || '0');
                     const openBags = parseFloat(mat[3] || '0');
-                    const inKg = openKg + (inwardByMat[id]?.kg || 0);
-                    const inBags = openBags + (inwardByMat[id]?.bags || 0);
-                    const outKg = outwardByMat[id]?.kg || 0;
-                    const outBags = outwardByMat[id]?.bags || 0;
-                    return { name: mat[1], stockKg: Math.max(0, inKg - outKg), stockBags: Math.max(0, inBags - outBags) };
+                    const openKg = parseFloat(mat[4] || '0');
+                    const totalOpenKg = (openBags * 25) + openKg;
+                    
+                    const inKg = inwardByMat[id] || 0;
+                    const outKg = outwardByMat[id] || 0;
+                    const stockKg = Math.max(0, totalOpenKg + inKg - outKg);
+                    
+                    return { name: mat[1], stockKg, stockBags: Math.floor(stockKg / 25) };
                 }).filter((i: any) => i.name);
                 setInventory(invItems);
             } catch (err) {

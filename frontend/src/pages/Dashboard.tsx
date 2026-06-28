@@ -48,11 +48,15 @@ export default function Dashboard() {
                     if (row[12] !== 'Confirmed') pendingReceivables += amount;
                 });
 
-                // Inventory: Opening stock (from Materials) + Purchases - Sales
+                // Inventory: (Opening Bags * 25 + Opening KG) + Purchases - Sales
                 let totalInward = 0;
                 let totalOutward = 0;
-                // Add opening stock from each material (col 4 = opening KG)
-                materialsData.forEach(mat => totalInward += parseFloat(mat[4] || '0'));
+                // Add opening stock from each material
+                materialsData.forEach(mat => {
+                    const openBags = parseFloat(mat[3] || '0');
+                    const openKg = parseFloat(mat[4] || '0');
+                    totalInward += (openBags * 25) + openKg;
+                });
                 purchaseItemsData.forEach(row => totalInward += parseFloat(row[5] || '0'));
                 saleItemsData.forEach(row => totalOutward += parseFloat(row[5] || '0'));
                 const currentStock = Math.max(0, totalInward - totalOutward);
