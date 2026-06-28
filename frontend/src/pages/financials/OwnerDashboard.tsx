@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { TrendingUp, AlertTriangle, Package, DollarSign } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { fetchSheetData } from '../../services/googleSheets';
 import { format, differenceInDays } from 'date-fns';
 import { formatBagInventory } from '../../services/materialsHelper';
 
@@ -58,15 +59,13 @@ export default function OwnerDashboard() {
                     if (period === 'fy') return d >= currentFYStart;
                     return true; // 'all'
                 };
-                const fyLabel = `FY ${currentFYStart.getFullYear()}-${String(currentFYStart.getFullYear() + 1).slice(2)}`;
 
-                // ── Revenue split: Realized (confirmed) vs Unrealized (pending) ──
                 let revenue = 0;
                 let realizedRevenue = 0;
                 let unrealizedRevenue = 0;
                 let costOfGoodsSold = 0;
                 let realizedCOGS = 0;
-                salesData.filter(r => filterDate(r[2])).forEach(sale => {
+                salesData.filter((r: any) => filterDate(r[2])).forEach((sale: any) => {
                     const amt = parseFloat(sale[10] || '0');
                     revenue += amt;
                     if (sale[12] === 'Confirmed') realizedRevenue += amt;
@@ -76,7 +75,7 @@ export default function OwnerDashboard() {
                 // Avg purchase cost per KG per material
                 const matCost: Record<string, number> = {};
                 const matTotalKg: Record<string, number> = {};
-                purchaseItemsData.forEach(item => {
+                purchaseItemsData.forEach((item: any) => {
                     const matId = item[2];
                     const kg = parseFloat(item[5] || '0');
                     const amount = parseFloat(item[7] || '0');
@@ -84,7 +83,7 @@ export default function OwnerDashboard() {
                     matTotalKg[matId] = (matTotalKg[matId] || 0) + kg;
                 });
                 // Also factor in opening stock cost from Materials sheet (col 7 = default purchase rate)
-                materialsData.forEach(mat => {
+                materialsData.forEach((mat: any) => {
                     const id = mat[0];
                     const openKg = parseFloat(mat[4] || '0'); // opening stock KG
                     const openRate = parseFloat(mat[6] || '0'); // default purchase rate
@@ -98,29 +97,29 @@ export default function OwnerDashboard() {
                     avgCostPerKg[id] = matTotalKg[id] ? matCost[id] / matTotalKg[id] : 0;
                 });
 
-                saleItemsData.filter(item => {
-                    const sale = salesData.find(s => s[0] === item[1]);
+                saleItemsData.filter((item: any) => {
+                    const sale = salesData.find((s: any) => s[0] === item[1]);
                     return sale ? filterDate(sale[2]) : false;
-                }).forEach(item => {
+                }).forEach((item: any) => {
                     const matId = item[2];
                     const kg = parseFloat(item[5] || '0');
                     const avgCost = avgCostPerKg[matId] || 0;
                     const c = avgCost * kg;
                     costOfGoodsSold += c;
                     // Find sale to check confirmation
-                    const sale = salesData.find(s => s[0] === item[1]);
+                    const sale = salesData.find((s: any) => s[0] === item[1]);
                     if (sale?.[12] === 'Confirmed') realizedCOGS += c;
                 });
 
                 // --- Expenses ---
                 let expenses = 0;
-                expensesData.filter(r => filterDate(r[1])).forEach(exp => {
+                expensesData.filter((r: any) => filterDate(r[1])).forEach((exp: any) => {
                     expenses += parseFloat(exp[3] || '0');
                 });
 
                 // --- Purchase spend ---
                 let purchaseSpend = 0;
-                purchasesData.filter(r => filterDate(r[2])).forEach(p => {
+                purchasesData.filter((r: any) => filterDate(r[2])).forEach((p: any) => {
                     purchaseSpend += parseFloat(p[7] || '0');
                 });
 
@@ -133,28 +132,28 @@ export default function OwnerDashboard() {
 
                 // --- Overdue Invoices (>30 days, unpaid) ---
                 const overdue: OverdueInvoice[] = salesData
-                    .filter(r => r[12] !== 'Confirmed' && r[2])
-                    .map(r => ({ invoiceNo: r[0], customer: r[5], grandTotal: r[10], invoiceDate: r[2], daysOverdue: differenceInDays(now, new Date(r[2])) }))
-                    .filter(r => r.daysOverdue > 30)
-                    .sort((a, b) => b.daysOverdue - a.daysOverdue);
+                    .filter((r: any) => r[12] !== 'Confirmed' && r[2])
+                    .map((r: any) => ({ invoiceNo: r[0], customer: r[5], grandTotal: r[10], invoiceDate: r[2], daysOverdue: differenceInDays(now, new Date(r[2])) }))
+                    .filter((r: any) => r.daysOverdue > 30)
+                    .sort((a: any, b: any) => b.daysOverdue - a.daysOverdue);
                 setOverdueInvoices(overdue);
 
                 // ── Inventory: Opening Stock + Purchases - Sales (all-time, not period-filtered) ──
                 const inwardByMat: Record<string, { kg: number; bags: number }> = {};
                 const outwardByMat: Record<string, { kg: number; bags: number }> = {};
-                purchaseItemsData.forEach(item => {
+                purchaseItemsData.forEach((item: any) => {
                     const id = item[2];
                     if (!inwardByMat[id]) inwardByMat[id] = { kg: 0, bags: 0 };
                     inwardByMat[id].kg += parseFloat(item[5] || '0');
                     inwardByMat[id].bags += parseFloat(item[4] || '0');
                 });
-                saleItemsData.forEach(item => {
+                saleItemsData.forEach((item: any) => {
                     const id = item[2];
                     if (!outwardByMat[id]) outwardByMat[id] = { kg: 0, bags: 0 };
                     outwardByMat[id].kg += parseFloat(item[5] || '0');
                     outwardByMat[id].bags += parseFloat(item[4] || '0');
                 });
-                const invItems: InventoryItem[] = materialsData.map(mat => {
+                const invItems: InventoryItem[] = materialsData.map((mat: any) => {
                     const id = mat[0];
                     // Opening stock from Materials master (set when material is created)
                     const openKg = parseFloat(mat[4] || '0');
@@ -164,7 +163,7 @@ export default function OwnerDashboard() {
                     const outKg = outwardByMat[id]?.kg || 0;
                     const outBags = outwardByMat[id]?.bags || 0;
                     return { name: mat[1], stockKg: Math.max(0, inKg - outKg), stockBags: Math.max(0, inBags - outBags) };
-                }).filter(i => i.name);
+                }).filter((i: any) => i.name);
                 setInventory(invItems);
             } catch (err) {
                 console.error('Owner dashboard load failed', err);
