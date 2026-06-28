@@ -1,9 +1,20 @@
 import { useEffect, useRef, useState } from 'react';
-import { ShoppingCart, Plus, X, CheckCircle, Camera, ImageIcon, Loader } from 'lucide-react';
+import { ShoppingCart, Plus, X, CheckCircle, Camera, ImageIcon, Loader, Trash2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { fetchSheetData, appendRow, updateRow, uploadFileToDrive } from '../../services/googleSheets';
 import { format } from 'date-fns';
 import { getLatestBuyPrices, formatBagInventory } from '../../services/materialsHelper';
+
+interface PurchaseLineItem {
+    materialId: string;
+    materialName: string;
+    bags: string;
+    weight: string;
+    rate: string;
+    taxRate: number;
+    amount: number;
+    taxAmount: number;
+}
 
 export default function Purchases() {
     const { accessToken } = useAuth();
@@ -20,16 +31,16 @@ export default function Purchases() {
     const [confirmModal, setConfirmModal] = useState<{ open: boolean; rowIdx: number; purchaseId: string; supplier: string } | null>(null);
     const [confirmForm, setConfirmForm] = useState({ refNo: '', payDate: new Date().toISOString().split('T')[0] });
 
-    // Form
+    // Main Form
     const [formData, setFormData] = useState({
         billNo: `PO-${Date.now().toString().slice(-6)}`,
         date: new Date().toISOString().split('T')[0],
         supplierId: '',
-        materialId: '',
-        bags: '',
-        weight: '',
-        rate: '',
     });
+
+    // Line Items State
+    const [lineItems, setLineItems] = useState<PurchaseLineItem[]>([]);
+    const [currentItem, setCurrentItem] = useState({ materialId: '', bags: '', weight: '', rate: '' });
 
     // Photo capture
     const [capturedPhotos, setCapturedPhotos] = useState<File[]>([]);
@@ -65,12 +76,48 @@ export default function Purchases() {
     const handleMaterialChange = (matId: string) => {
         const mat = materials.find(m => m[0] === matId);
         const latestPrice = latestBuyPrices[matId];
-        setFormData(prev => ({
+        setCurrentItem(prev => ({
             ...prev,
             materialId: matId,
             rate: latestPrice !== undefined ? String(latestPrice) : (mat ? mat[6] : '')
         }));
     };
+
+    const addLineItem = () => {
+        const mat = materials.find(m => m[0] === currentItem.materialId);
+        if (!mat || !currentItem.weight || !currentItem.rate) {
+            alert('Please select a material and enter weight and rate.');
+            return;
+        }
+        const weight = parseFloat(currentItem.weight);
+        const rate = parseFloat(currentItem.rate);
+        const taxRate = parseFloat(mat[5] || '0');
+        const amount = weight * rate;
+        const taxAmount = (amount * taxRate) / 100;
+
+        const item: PurchaseLineItem = {
+            materialId: mat[0],
+            materialName: mat[1],
+            bags: currentItem.bags || '0',
+            weight: currentItem.weight,
+            rate: currentItem.rate,
+            taxRate,
+            amount,
+            taxAmount
+        };
+        setLineItems(prev => [...prev, item]);
+        setCurrentItem({ materialId: '', bags: '', weight: '', rate: '' });
+    };
+
+    const removeLineItem = (idx: number) => {
+        setLineItems(prev => prev.filter((_, i) => i !== idx));
+    };
+
+    const purchaseTotals = lineItems.reduce((acc, item) => ({
+        subTotal: acc.subTotal + item.amount,
+        taxTotal: acc.taxTotal + item.taxAmount,
+        grandTotal: acc.grandTotal + item.amount + item.taxAmount
+    }), { subTotal: 0, taxTotal: 0, grandTotal: 0 });
 
     // ── Photo handling ──────────────────────────────────────────────────────────
     const handlePhotoCapture = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -80,7 +127,6 @@ export default function Purchases() {
         setCapturedPhotos(newPhotos);
         const newUrls = newPhotos.map(f => URL.createObjectURL(f));
         setPhotoPreviewUrls(newUrls);
-        // Reset input so the same file can be captured again
         if (cameraInputRef.current) cameraInputRef.current.value = '';
     };
 
@@ -94,16 +140,13 @@ export default function Purchases() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!accessToken) return;
+        if (!formData.supplierId) return alert('Please select a supplier.');
+        if (lineItems.length === 0) return alert('Please add at least one material item.');
         const selectedParty = parties.find(p => p[0] === formData.supplierId);
-        const selectedMat = materials.find(m => m[0] === formData.materialId);
-        if (!selectedParty || !selectedMat) return alert('Invalid selection');
+        if (!selectedParty) return alert('Invalid supplier selection.');
         setIsSubmitting(true);
 
         try {
-            const amount = parseFloat(formData.weight) * parseFloat(formData.rate);
-            const taxRate = parseFloat(selectedMat[5] || '0');
-            const taxAmount = (amount * taxRate) / 100;
-            const grandTotal = amount + taxAmount;
             const purchaseId = `PUR-${Date.now()}`;
 
             // Upload photos to Google Drive
@@ -130,35 +173,37 @@ export default function Purchases() {
                 formData.date,
                 selectedParty[0],
                 selectedParty[1],
-                amount.toFixed(2),
-                taxAmount.toFixed(2),
-                grandTotal.toFixed(2),
+                purchaseTotals.subTotal.toFixed(2),
+                purchaseTotals.taxTotal.toFixed(2),
+                purchaseTotals.grandTotal.toFixed(2),
                 'Unpaid',
                 '',          // Payment Date
                 '',          // Payment Ref
                 photoUrls,   // col L
             ];
-            const itemRow = [
-                `PITM-${Date.now()}`,
+
+            const itemRows = lineItems.map((item, idx) => [
+                `PITM-${Date.now()}-${idx}`,
                 purchaseId,
-                selectedMat[0],
-                selectedMat[1],
-                formData.bags,
-                formData.weight,
-                formData.rate,
-                amount.toFixed(2)
-            ];
+                item.materialId,
+                item.materialName,
+                item.bags,
+                item.weight,
+                item.rate,
+                item.amount.toFixed(2)
+            ]);
 
             await appendRow(accessToken, 'Purchases!A:L', [purchaseRow]);
-            await appendRow(accessToken, 'Purchase_Items!A:H', [itemRow]);
+            await appendRow(accessToken, 'Purchase_Items!A:H', itemRows);
 
             setIsModalOpen(false);
             setCapturedPhotos([]);
             setPhotoPreviewUrls([]);
+            setLineItems([]);
             setFormData({
                 billNo: `PO-${Date.now().toString().slice(-6)}`,
                 date: new Date().toISOString().split('T')[0],
-                supplierId: '', materialId: '', bags: '', weight: '', rate: ''
+                supplierId: '',
             });
             await loadData();
         } catch (error) {
@@ -200,7 +245,7 @@ export default function Purchases() {
                     </h1>
                     <p>Record inward supplies. Attach invoice photos for reference.</p>
                 </div>
-                <button className="btn btn-primary" onClick={() => setIsModalOpen(true)}>
+                <button className="btn btn-primary" onClick={() => { setLineItems([]); setIsModalOpen(true); }}>
                     <Plus size={16} /> New Purchase
                 </button>
             </div>
@@ -269,13 +314,14 @@ export default function Purchases() {
             {/* ── New Purchase Modal ───────────────────────────────────────────── */}
             {isModalOpen && (
                 <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setIsModalOpen(false); }}>
-                    <div className="card" style={{ width: '100%', maxWidth: '540px' }}>
+                    <div className="card" style={{ width: '100%', maxWidth: '560px', maxHeight: '95vh', overflowY: 'auto' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
                             <h2 style={{ fontSize: '1.1rem' }}>Record Incoming Purchase</h2>
                             <button onClick={() => setIsModalOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} /></button>
                         </div>
 
                         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                            {/* Bill Header Info */}
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                                 <div className="input-group">
                                     <label className="input-label">Supplier Bill / Challan No</label>
@@ -292,33 +338,96 @@ export default function Purchases() {
                                         {parties.map(p => <option key={p[0]} value={p[0]}>{p[1]}</option>)}
                                     </select>
                                 </div>
-                                <div className="input-group" style={{ gridColumn: '1 / -1' }}>
-                                    <label className="input-label">Material *</label>
-                                    <select required className="input-field" value={formData.materialId} onChange={e => handleMaterialChange(e.target.value)}>
-                                        <option value="">-- Select Material --</option>
-                                        {materials.map(m => {
-                                            const stockKg = parseFloat(m[9] || '0');
-                                            return (
-                                                <option key={m[0]} value={m[0]}>
-                                                    {m[1]} {stockKg > 0 ? `(Stock: ${formatBagInventory(stockKg)})` : '(Out of Stock)'}
-                                                </option>
-                                            );
-                                        })}
-                                    </select>
-                                </div>
-                                <div className="input-group">
-                                    <label className="input-label">No. of Bags</label>
-                                    <input required type="number" className="input-field" value={formData.bags} onChange={e => setFormData({ ...formData, bags: e.target.value })} />
-                                </div>
-                                <div className="input-group">
-                                    <label className="input-label">Total Weight (KG)</label>
-                                    <input required type="number" step="0.01" className="input-field" value={formData.weight} onChange={e => setFormData({ ...formData, weight: e.target.value })} />
-                                </div>
-                                <div className="input-group" style={{ gridColumn: '1 / -1' }}>
-                                    <label className="input-label">Rate / KG (&#8377;)</label>
-                                    <input required type="number" step="0.01" className="input-field" value={formData.rate} onChange={e => setFormData({ ...formData, rate: e.target.value })} />
+                            </div>
+
+                            {/* Add Material Item Form */}
+                            <div style={{ backgroundColor: 'var(--bg-app)', padding: '0.875rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+                                <p style={{ fontWeight: 700, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--text-secondary)', marginBottom: '0.75rem' }}>Add Material Item</p>
+                                
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                                    <div className="input-group">
+                                        <label className="input-label">Material *</label>
+                                        <select className="input-field" value={currentItem.materialId} onChange={e => handleMaterialChange(e.target.value)}>
+                                            <option value="">-- Select Material --</option>
+                                            {materials.map(m => {
+                                                const stockKg = parseFloat(m[9] || '0');
+                                                return (
+                                                    <option key={m[0]} value={m[0]}>
+                                                        {m[1]} {stockKg > 0 ? `(Stock: ${formatBagInventory(stockKg)})` : '(Out of Stock)'}
+                                                    </option>
+                                                );
+                                            })}
+                                        </select>
+                                    </div>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.5rem' }}>
+                                        <div className="input-group">
+                                            <label className="input-label">No. of Bags</label>
+                                            <input type="number" className="input-field" value={currentItem.bags} onChange={e => setCurrentItem({ ...currentItem, bags: e.target.value })} placeholder="0" />
+                                        </div>
+                                        <div className="input-group">
+                                            <label className="input-label">Total Weight (KG)</label>
+                                            <input type="number" step="0.01" className="input-field" value={currentItem.weight} onChange={e => setCurrentItem({ ...currentItem, weight: e.target.value })} placeholder="0.00" />
+                                        </div>
+                                        <div className="input-group">
+                                            <label className="input-label">Rate / KG (₹)</label>
+                                            <input type="number" step="0.01" className="input-field" value={currentItem.rate} onChange={e => setCurrentItem({ ...currentItem, rate: e.target.value })} placeholder="0.00" />
+                                        </div>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.25rem' }}>
+                                        <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                            {currentItem.weight && currentItem.rate
+                                                ? <>Item Total: <strong>₹{(parseFloat(currentItem.weight) * parseFloat(currentItem.rate)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></>
+                                                : 'Enter weight and rate to see total'}
+                                        </span>
+                                        <button type="button" className="btn btn-secondary" style={{ padding: '0.4rem 1rem', fontSize: '0.78rem' }} onClick={addLineItem}>
+                                            <Plus size={14} /> Add Item
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
+
+                            {/* Added Items List */}
+                            {lineItems.length > 0 && (
+                                <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+                                    <table style={{ fontSize: '0.82rem', minWidth: '460px' }}>
+                                        <thead>
+                                            <tr>
+                                                <th>Material</th>
+                                                <th>Bags</th>
+                                                <th>Weight (KG)</th>
+                                                <th>Rate/KG</th>
+                                                <th>Amount</th>
+                                                <th style={{ width: '40px' }}></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {lineItems.map((item, idx) => (
+                                                <tr key={idx}>
+                                                    <td style={{ fontWeight: 500 }}>{item.materialName}</td>
+                                                    <td>{item.bags}</td>
+                                                    <td>{item.weight} KG</td>
+                                                    <td>₹{parseFloat(item.rate).toFixed(2)}</td>
+                                                    <td style={{ fontWeight: 600 }}>₹{item.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                                    <td>
+                                                        <button type="button" onClick={() => removeLineItem(idx)} style={{ background: 'none', border: 'none', color: 'var(--color-danger)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}>
+                                                            <Trash2 size={14} />
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+
+                            {/* Totals Summary */}
+                            {lineItems.length > 0 && (
+                                <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.35rem', alignItems: 'flex-end', fontSize: '0.85rem' }}>
+                                    <div>Subtotal: <strong>₹{purchaseTotals.subTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></div>
+                                    <div>Tax Amount: <strong>₹{purchaseTotals.taxTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></div>
+                                    <div style={{ fontSize: '1rem', color: 'var(--color-primary)' }}>Grand Total: <strong>₹{purchaseTotals.grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></div>
+                                </div>
+                            )}
 
                             {/* Photo Capture Section */}
                             <div style={{ borderTop: '1px solid var(--border-color)', paddingTop: '0.75rem' }}>
@@ -333,7 +442,6 @@ export default function Purchases() {
                                         <Camera size={14} /> {capturedPhotos.length === 0 ? 'Capture / Upload' : 'Add More'}
                                     </button>
                                 </div>
-                                {/* Hidden file input — accepts camera on mobile, file picker on desktop */}
                                 <input
                                     ref={cameraInputRef}
                                     type="file"
