@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { FileText, Plus, X, CheckCircle, Pencil, Trash2 } from 'lucide-react';
+import { FileText, Plus, X, CheckCircle, Pencil, Trash2, RefreshCw } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { fetchSheetData, appendRow, updateRow, getNextInvoiceNumber } from '../../services/googleSheets';
 import { logNotification } from '../../services/notifications';
@@ -51,6 +51,10 @@ export default function Sales() {
     // Edit invoice modal (within 7 days)
     const [editModal, setEditModal] = useState<{ open: boolean; rowIdx: number; sheetRowNum: number; row: any[] } | null>(null);
     const [editForm, setEditForm] = useState({ weight: '', rate: '', paymentMode: '' });
+
+    // Change payment mode modal (for cash entries)
+    const [paymentModeModal, setPaymentModeModal] = useState<{ open: boolean; rowIdx: number; sheetRowNum: number; row: any[] } | null>(null);
+    const [paymentModeForm, setPaymentModeForm] = useState({ paymentMode: '' });
 
     // Print / view invoice
     const [printInvoiceNo, setPrintInvoiceNo] = useState<string | null>(null);
@@ -303,10 +307,50 @@ export default function Sales() {
     const handleEdit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!accessToken || !editModal) return;
+        if (!editForm.weight || !editForm.rate) return alert('Please enter both Weight and Rate to recalculate totals.');
         setIsSubmitting(true);
         const row = editModal.row;
+        try {
+            const mat = materials.find(m => m[1] === row[5]);
+            const taxRate = mat ? parseFloat(mat[5] || '0') : 0;
+            const amount = parseFloat(editForm.weight) * parseFloat(editForm.rate);
+            const taxAmount = (amount * taxRate) / 100;
+            const cgst = taxRate > 0 ? taxAmount / 2 : 0;
+            const sgst = taxRate > 0 ? taxAmount / 2 : 0;
+            const grandTotal = amount + taxAmount;
+
+            await updateRow(accessToken, `Sales!G${editModal.sheetRowNum}:L${editModal.sheetRowNum}`, [[
+                amount.toFixed(2), cgst.toFixed(2), sgst.toFixed(2), '0',
+                grandTotal.toFixed(2), editForm.paymentMode
+            ]]);
+            await logNotification(accessToken, 'INVOICE_EDIT',
+                `Invoice ${row[0]} for ${row[5]} edited by ${user?.name || 'a manager'}. New Total: \u20b9${grandTotal.toFixed(2)}, Mode: ${editForm.paymentMode}.`,
+                user?.name || 'Unknown');
+            setEditModal(null);
+            await loadData();
+        } catch (err) {
+            console.error(err);
+            alert('Failed to save edits.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    // ── Open payment mode modal ───────────────────────────────────────────────────
+    const openPaymentModeModal = (idx: number, row: any[]) => {
+        const sheetRowNum = sales.length - idx + 1;
+        setPaymentModeForm({ paymentMode: row[11] || 'Bank Transfer' });
+        setPaymentModeModal({ open: true, rowIdx: idx, sheetRowNum, row });
+    };
+
+    // ── Save payment mode edits ───────────────────────────────────────────────────
+    const handlePaymentModeEdit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!accessToken || !paymentModeModal) return;
+        setIsSubmitting(true);
+        const row = paymentModeModal.row;
         const oldMode = row[11];
-        const newMode = editForm.paymentMode;
+        const newMode = paymentModeForm.paymentMode;
         
         try {
             if (oldMode !== newMode) {
@@ -343,7 +387,7 @@ export default function Sales() {
                     await appendRow(accessToken, 'Cash_Ledger!A:F', [clRow]);
                 }
 
-                await updateRow(accessToken, `Sales!L${editModal.sheetRowNum}:M${editModal.sheetRowNum}`, [[
+                await updateRow(accessToken, `Sales!L${paymentModeModal.sheetRowNum}:M${paymentModeModal.sheetRowNum}`, [[
                     newMode, status
                 ]]);
                 
@@ -352,11 +396,6 @@ export default function Sales() {
                     user?.name || 'Unknown');
             }
                 
-            setEditModal(null);
-            await loadData();
-        } catch (err) {
-            console.error(err);
-            alert('Failed to save edits.');
         } finally {
             setIsSubmitting(false);
         }
@@ -433,6 +472,12 @@ export default function Sales() {
                                                     <button onClick={() => openEditModal(idx, row)}
                                                         style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>
                                                         <Pencil size={14} /><span className="desktop-only">Edit</span>
+                                                    </button>
+                                                )}
+                                                {(row[11] === 'Cash-Invoice' || row[11] === 'Cash') && (
+                                                    <button onClick={() => openPaymentModeModal(idx, row)}
+                                                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-warning)', display: 'flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>
+                                                        <RefreshCw size={14} /><span className="desktop-only">Change Mode</span>
                                                     </button>
                                                 )}
                                             </div>
@@ -725,10 +770,55 @@ export default function Sales() {
                             <span style={{ color: 'var(--color-warning)' }}>Editable within 7 days</span>
                         </p>
                         <form onSubmit={handleEdit} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                                <div className="input-group">
+                                    <label className="input-label">New Weight (KG) *</label>
+                                    <input required type="number" step="0.01" className="input-field" value={editForm.weight} onChange={e => setEditForm({ ...editForm, weight: e.target.value })} />
+                                </div>
+                                <div className="input-group">
+                                    <label className="input-label">New Rate/KG (&#8377;) *</label>
+                                    <input required type="number" step="0.01" className="input-field" value={editForm.rate} onChange={e => setEditForm({ ...editForm, rate: e.target.value })} />
+                                </div>
+                                <div className="input-group" style={{ gridColumn: '1 / -1' }}>
+                                    <label className="input-label">Payment Mode</label>
+                                    <select className="input-field" value={editForm.paymentMode} onChange={e => setEditForm({ ...editForm, paymentMode: e.target.value })}>
+                                        <option value="Bank Transfer">Bank Transfer / Invoice (GST)</option>
+                                        <option value="Cash-Invoice">Cash-Invoice (GST + Paid in Cash)</option>
+                                        <option value="Cash">Cash (No GST)</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div style={{ backgroundColor: 'rgba(198,40,40,0.07)', borderRadius: 'var(--radius-sm)', padding: '0.6rem 0.8rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                                Owner will be automatically notified of this change.
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+                                <button type="button" className="btn btn-secondary" onClick={() => setEditModal(null)}>Cancel</button>
+                                <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
+                                    <Pencil size={16} /> {isSubmitting ? 'Saving…' : 'Save Changes'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Change Payment Mode Modal ─────────────────────────────────────── */}
+            {paymentModeModal?.open && (
+                <div className="modal-overlay" style={{ zIndex: 60 }}
+                    onClick={(e) => { if (e.target === e.currentTarget) setPaymentModeModal(null); }}>
+                    <div className="card" style={{ width: '100%', maxWidth: '420px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+                            <h2 style={{ fontSize: '1.1rem' }}>Change Payment Mode</h2>
+                            <button onClick={() => setPaymentModeModal(null)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} /></button>
+                        </div>
+                        <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+                            <strong>{paymentModeModal.row[0]}</strong> · {paymentModeModal.row[5]}
+                        </p>
+                        <form onSubmit={handlePaymentModeEdit} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                             <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.75rem' }}>
                                 <div className="input-group">
-                                    <label className="input-label">Change Payment Mode</label>
-                                    <select className="input-field" value={editForm.paymentMode} onChange={e => setEditForm({ ...editForm, paymentMode: e.target.value })}>
+                                    <label className="input-label">Payment Mode</label>
+                                    <select className="input-field" value={paymentModeForm.paymentMode} onChange={e => setPaymentModeForm({ ...paymentModeForm, paymentMode: e.target.value })}>
                                         <option value="Bank Transfer">Bank Transfer / Invoice (GST)</option>
                                         <option value="Cash-Invoice">Cash-Invoice (GST + Paid in Cash)</option>
                                         <option value="Cash">Cash (No GST)</option>
@@ -739,9 +829,9 @@ export default function Sales() {
                                 If you change from Cash to Bank Transfer, an automatic adjustment entry will be made in the Cash Ledger. Owner will be notified.
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
-                                <button type="button" className="btn btn-secondary" onClick={() => setEditModal(null)}>Cancel</button>
+                                <button type="button" className="btn btn-secondary" onClick={() => setPaymentModeModal(null)}>Cancel</button>
                                 <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-                                    <Pencil size={16} /> {isSubmitting ? 'Saving…' : 'Save Changes'}
+                                    <RefreshCw size={16} /> {isSubmitting ? 'Saving…' : 'Save Changes'}
                                 </button>
                             </div>
                         </form>
