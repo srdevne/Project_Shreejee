@@ -303,25 +303,55 @@ export default function Sales() {
     const handleEdit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!accessToken || !editModal) return;
-        if (!editForm.weight || !editForm.rate) return alert('Please enter both Weight and Rate to recalculate totals.');
         setIsSubmitting(true);
         const row = editModal.row;
+        const oldMode = row[11];
+        const newMode = editForm.paymentMode;
+        
         try {
-            const mat = materials.find(m => m[1] === row[5]);
-            const taxRate = mat ? parseFloat(mat[5] || '0') : 0;
-            const amount = parseFloat(editForm.weight) * parseFloat(editForm.rate);
-            const taxAmount = (amount * taxRate) / 100;
-            const cgst = taxRate > 0 ? taxAmount / 2 : 0;
-            const sgst = taxRate > 0 ? taxAmount / 2 : 0;
-            const grandTotal = amount + taxAmount;
+            if (oldMode !== newMode) {
+                const wasCash = oldMode === 'Cash' || oldMode === 'Cash-Invoice';
+                const isNowCash = newMode === 'Cash' || newMode === 'Cash-Invoice';
+                
+                let status = row[12];
+                
+                // If changing from Cash to Bank Transfer, reverse the Cash Ledger entry
+                if (wasCash && !isNowCash) {
+                    status = 'Pending';
+                    const clRow = [
+                        `CL-${Date.now()}`,
+                        new Date().toISOString().split('T')[0],
+                        'Adjustment',
+                        row[0],
+                        `-${row[10]}`,
+                        `Reversal: Mode changed from ${oldMode} to ${newMode}`,
+                    ];
+                    await appendRow(accessToken, 'Cash_Ledger!A:F', [clRow]);
+                } 
+                // If changing from Bank Transfer to Cash, create a new Cash Ledger entry
+                else if (!wasCash && isNowCash) {
+                    status = 'Confirmed';
+                    const clType = newMode === 'Cash-Invoice' ? 'Cash-Invoice Sale' : 'Cash Sale';
+                    const clRow = [
+                        `CL-${Date.now()}`,
+                        new Date().toISOString().split('T')[0],
+                        clType,
+                        row[0],
+                        row[10],
+                        `${clType} — ${row[5]} (Mode Changed)`,
+                    ];
+                    await appendRow(accessToken, 'Cash_Ledger!A:F', [clRow]);
+                }
 
-            await updateRow(accessToken, `Sales!G${editModal.sheetRowNum}:L${editModal.sheetRowNum}`, [[
-                amount.toFixed(2), cgst.toFixed(2), sgst.toFixed(2), '0',
-                grandTotal.toFixed(2), editForm.paymentMode
-            ]]);
-            await logNotification(accessToken, 'INVOICE_EDIT',
-                `Invoice ${row[0]} for ${row[5]} edited by ${user?.name || 'a manager'}. New Total: \u20b9${grandTotal.toFixed(2)}, Mode: ${editForm.paymentMode}.`,
-                user?.name || 'Unknown');
+                await updateRow(accessToken, `Sales!L${editModal.sheetRowNum}:M${editModal.sheetRowNum}`, [[
+                    newMode, status
+                ]]);
+                
+                await logNotification(accessToken, 'INVOICE_EDIT',
+                    `Invoice ${row[0]} for ${row[5]} payment mode changed from ${oldMode} to ${newMode} by ${user?.name || 'a manager'}.`,
+                    user?.name || 'Unknown');
+            }
+                
             setEditModal(null);
             await loadData();
         } catch (err) {
@@ -695,17 +725,9 @@ export default function Sales() {
                             <span style={{ color: 'var(--color-warning)' }}>Editable within 7 days</span>
                         </p>
                         <form onSubmit={handleEdit} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.75rem' }}>
                                 <div className="input-group">
-                                    <label className="input-label">New Weight (KG) *</label>
-                                    <input required type="number" step="0.01" className="input-field" value={editForm.weight} onChange={e => setEditForm({ ...editForm, weight: e.target.value })} />
-                                </div>
-                                <div className="input-group">
-                                    <label className="input-label">New Rate/KG (&#8377;) *</label>
-                                    <input required type="number" step="0.01" className="input-field" value={editForm.rate} onChange={e => setEditForm({ ...editForm, rate: e.target.value })} />
-                                </div>
-                                <div className="input-group" style={{ gridColumn: '1 / -1' }}>
-                                    <label className="input-label">Payment Mode</label>
+                                    <label className="input-label">Change Payment Mode</label>
                                     <select className="input-field" value={editForm.paymentMode} onChange={e => setEditForm({ ...editForm, paymentMode: e.target.value })}>
                                         <option value="Bank Transfer">Bank Transfer / Invoice (GST)</option>
                                         <option value="Cash-Invoice">Cash-Invoice (GST + Paid in Cash)</option>
@@ -714,7 +736,7 @@ export default function Sales() {
                                 </div>
                             </div>
                             <div style={{ backgroundColor: 'rgba(198,40,40,0.07)', borderRadius: 'var(--radius-sm)', padding: '0.6rem 0.8rem', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                                Owner will be automatically notified of this change.
+                                If you change from Cash to Bank Transfer, an automatic adjustment entry will be made in the Cash Ledger. Owner will be notified.
                             </div>
                             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
                                 <button type="button" className="btn btn-secondary" onClick={() => setEditModal(null)}>Cancel</button>
