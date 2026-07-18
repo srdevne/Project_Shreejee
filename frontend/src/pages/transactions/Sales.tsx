@@ -148,8 +148,9 @@ export default function Sales() {
         setLineItems(prev => prev.filter((_, i) => i !== idx));
     };
 
+    const isCashMode = formData.paymentMode === 'Cash';
     const subTotal = lineItems.reduce((sum, item) => sum + item.amount, 0);
-    const rawTaxTotal = lineItems.reduce((sum, item) => sum + item.taxAmount, 0);
+    const rawTaxTotal = isCashMode ? 0 : lineItems.reduce((sum, item) => sum + item.taxAmount, 0);
     const taxTotal = Math.round(rawTaxTotal);
     const grandTotal = Math.round(subTotal + taxTotal);
     const invoiceTotals = { subTotal, taxTotal, grandTotal };
@@ -165,6 +166,8 @@ export default function Sales() {
             const { subTotal, taxTotal, grandTotal } = invoiceTotals;
             const cgst = taxTotal / 2;
             const sgst = taxTotal / 2;
+            const isCash = formData.paymentMode === 'Cash' || formData.paymentMode === 'Cash-Invoice';
+            const paymentStatus = isCash ? 'Confirmed' : 'Pending';
             // Generate unique verifiable invoice UID
             const uid = `SJE-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
 
@@ -174,7 +177,7 @@ export default function Sales() {
                 subTotal.toFixed(2), cgst.toFixed(2), sgst.toFixed(2), '0',
                 grandTotal.toFixed(2),
                 formData.paymentMode,
-                'Pending', '', '',
+                paymentStatus, '', '',
                 formData.orderType,  // col P
                 uid,                 // col Q — unique verifiable UID
             ];
@@ -190,6 +193,20 @@ export default function Sales() {
                     item.taxRate, item.amount.toFixed(2)
                 ];
                 await appendRow(accessToken, 'Sale_Items!A:I', [itemRow]);
+            }
+
+            // Auto-write Cash_Ledger entry for Cash / Cash-Invoice sales
+            if (isCash) {
+                const clType = formData.paymentMode === 'Cash-Invoice' ? 'Cash-Invoice Sale' : 'Cash Sale';
+                const clRow = [
+                    `CL-${Date.now()}`,
+                    formData.date,
+                    clType,
+                    formData.invoiceNo,
+                    grandTotal.toFixed(2),
+                    `${clType} — ${selectedParty[1]}`,
+                ];
+                await appendRow(accessToken, 'Cash_Ledger!A:F', [clRow]);
             }
 
             setIsModalOpen(false);
@@ -388,10 +405,15 @@ export default function Sales() {
                             <div className="input-group">
                                 <label className="input-label">Payment Mode</label>
                                 <select className="input-field" value={formData.paymentMode} onChange={e => setFormData({ ...formData, paymentMode: e.target.value })}>
-                                    <option value="Cash">Cash</option>
-                                    <option value="Cheque">Cheque</option>
-                                    <option value="Bank Transfer">Bank Transfer (NEFT/UPI)</option>
+                                    <option value="Bank Transfer">Bank Transfer / Invoice (GST)</option>
+                                    <option value="Cash-Invoice">Cash-Invoice (GST + Paid in Cash)</option>
+                                    <option value="Cash">Cash (No GST)</option>
                                 </select>
+                                {(formData.paymentMode === 'Cash-Invoice' || formData.paymentMode === 'Cash') && (
+                                    <p style={{ fontSize: '0.72rem', color: 'var(--color-secondary)', marginTop: '0.25rem' }}>
+                                        ✅ {formData.paymentMode === 'Cash' ? 'No GST applied. ' : 'GST applied. '}Payment will be auto-confirmed as received.
+                                    </p>
+                                )}
                             </div>
                         </div>
 
@@ -511,7 +533,23 @@ export default function Sales() {
                                         </tbody>
                                         <tfoot>
                                             <tr style={{ backgroundColor: 'var(--bg-app)' }}>
-                                                <td colSpan={5} style={{ textAlign: 'right', fontWeight: 600, fontSize: '0.875rem', padding: '0.75rem 1rem' }}>Grand Total</td>
+                                                <td colSpan={5} style={{ textAlign: 'right', fontWeight: 500, fontSize: '0.8rem', padding: '0.35rem 1rem', color: 'var(--text-secondary)' }}>Subtotal</td>
+                                                <td style={{ textAlign: 'right', fontWeight: 600, fontSize: '0.85rem', padding: '0.35rem 1rem' }}>
+                                                    &#8377;{invoiceTotals.subTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                                </td>
+                                                <td></td>
+                                            </tr>
+                                            <tr style={{ backgroundColor: 'var(--bg-app)' }}>
+                                                <td colSpan={5} style={{ textAlign: 'right', fontWeight: 500, fontSize: '0.8rem', padding: '0.35rem 1rem', color: isCashMode ? 'var(--text-tertiary)' : 'var(--text-secondary)' }}>
+                                                    GST Tax {isCashMode ? '(Not Applicable — Cash Mode)' : ''}
+                                                </td>
+                                                <td style={{ textAlign: 'right', fontWeight: 600, fontSize: '0.85rem', padding: '0.35rem 1rem', color: isCashMode ? 'var(--text-tertiary)' : undefined }}>
+                                                    &#8377;{invoiceTotals.taxTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                                </td>
+                                                <td></td>
+                                            </tr>
+                                            <tr style={{ backgroundColor: 'var(--bg-app)', borderTop: '2px solid var(--border-color)' }}>
+                                                <td colSpan={5} style={{ textAlign: 'right', fontWeight: 700, fontSize: '0.9rem', padding: '0.75rem 1rem' }}>Grand Total</td>
                                                 <td style={{ textAlign: 'right', fontWeight: 700, fontSize: '1rem', color: 'var(--color-primary)', padding: '0.75rem 1rem' }}>
                                                     &#8377;{invoiceTotals.grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 })}
                                                 </td>
@@ -590,9 +628,9 @@ export default function Sales() {
                                 <div className="input-group" style={{ gridColumn: '1 / -1' }}>
                                     <label className="input-label">Payment Mode</label>
                                     <select className="input-field" value={editForm.paymentMode} onChange={e => setEditForm({ ...editForm, paymentMode: e.target.value })}>
-                                        <option value="Cash">Cash</option>
-                                        <option value="Cheque">Cheque</option>
-                                        <option value="Bank Transfer">Bank Transfer (NEFT/UPI)</option>
+                                        <option value="Bank Transfer">Bank Transfer / Invoice (GST)</option>
+                                        <option value="Cash-Invoice">Cash-Invoice (GST + Paid in Cash)</option>
+                                        <option value="Cash">Cash (No GST)</option>
                                     </select>
                                 </div>
                             </div>

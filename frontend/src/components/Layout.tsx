@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
     LayoutDashboard, Users, Package, LogOut, Menu, X,
-    FileText, ShoppingCart, Receipt, TrendingUp, Bell
+    FileText, ShoppingCart, Receipt, TrendingUp, Bell, Wallet
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchSheetData } from '../services/googleSheets';
@@ -43,7 +43,10 @@ export default function Layout({ children }: LayoutProps) {
 
     const navItems = [
         { name: 'Dashboard', path: '/', icon: <LayoutDashboard size={20} /> },
-        ...(user?.role === 'owner' ? [{ name: 'Analytics', path: '/owner', icon: <TrendingUp size={20} /> }] : []),
+        ...(user?.role === 'owner' ? [
+            { name: 'Analytics', path: '/owner', icon: <TrendingUp size={20} /> },
+            { name: 'Cash Ledger', path: '/cash-ledger', icon: <Wallet size={20} /> },
+        ] : []),
         { name: 'Sales', path: '/sales', icon: <FileText size={20} /> },
         { name: 'Purchases', path: '/purchases', icon: <ShoppingCart size={20} /> },
         { name: 'Expenses', path: '/expenses', icon: <Receipt size={20} /> },

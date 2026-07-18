@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ShoppingCart, Plus, X, CheckCircle, Camera, ImageIcon, Loader, Trash2 } from 'lucide-react';
+import { ShoppingCart, Plus, X, CheckCircle, Camera, ImageIcon, Loader, Trash2, Eye } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { fetchSheetData, appendRow, updateRow, uploadFileToDrive } from '../../services/googleSheets';
 import { format } from 'date-fns';
@@ -28,8 +28,12 @@ export default function Purchases() {
     const [uploadStatus, setUploadStatus] = useState('');
 
     // Payment confirmation
-    const [confirmModal, setConfirmModal] = useState<{ open: boolean; rowIdx: number; purchaseId: string; supplier: string } | null>(null);
-    const [confirmForm, setConfirmForm] = useState({ refNo: '', payDate: new Date().toISOString().split('T')[0] });
+    const [confirmModal, setConfirmModal] = useState<{ open: boolean; rowIdx: number; purchaseId: string; supplier: string; amount: string } | null>(null);
+    const [confirmForm, setConfirmForm] = useState({ refNo: '', payDate: new Date().toISOString().split('T')[0], payMode: 'Bank Transfer' });
+
+    // View purchase details
+    const [viewPurchase, setViewPurchase] = useState<{ header: any[]; items: any[] } | null>(null);
+    const [isViewLoading, setIsViewLoading] = useState(false);
 
     // Main Form
     const [formData, setFormData] = useState({
@@ -215,6 +219,21 @@ export default function Purchases() {
         }
     };
 
+    // ── View purchase details ────────────────────────────────────────────────────
+    const openViewModal = async (row: any[]) => {
+        setIsViewLoading(true);
+        setViewPurchase({ header: row, items: [] });
+        try {
+            const allItems = await fetchSheetData(accessToken!, 'Purchase_Items!A2:H');
+            const items = allItems.filter(r => r[1] === row[0]);
+            setViewPurchase({ header: row, items });
+        } catch {
+            // show header at minimum
+        } finally {
+            setIsViewLoading(false);
+        }
+    };
+
     // ── Confirm payment ─────────────────────────────────────────────────────────
     const confirmPayment = async () => {
         if (!accessToken || !confirmModal) return;
@@ -224,8 +243,22 @@ export default function Purchases() {
             await updateRow(accessToken, `Purchases!I${sheetRowNum}:K${sheetRowNum}`, [[
                 'Paid', confirmForm.payDate, confirmForm.refNo,
             ]]);
+
+            // Auto-write Cash_Ledger debit if paid in cash
+            if (confirmForm.payMode === 'Cash') {
+                const clRow = [
+                    `CL-${Date.now()}`,
+                    confirmForm.payDate,
+                    'Cash Purchase Payment',
+                    confirmModal.purchaseId,
+                    (-parseFloat(confirmModal.amount || '0')).toFixed(2),
+                    `Paid to ${confirmModal.supplier}`,
+                ];
+                await appendRow(accessToken, 'Cash_Ledger!A:F', [clRow]);
+            }
+
             setConfirmModal(null);
-            setConfirmForm({ refNo: '', payDate: new Date().toISOString().split('T')[0] });
+            setConfirmForm({ refNo: '', payDate: new Date().toISOString().split('T')[0], payMode: 'Bank Transfer' });
             await loadData();
         } catch (err) {
             console.error(err);
@@ -297,12 +330,18 @@ export default function Purchases() {
                                         ) : <span style={{ color: 'var(--text-tertiary)', fontSize: '0.78rem' }}>–</span>}
                                     </td>
                                     <td>
-                                        {row[8] !== 'Paid' && (
-                                            <button onClick={() => setConfirmModal({ open: true, rowIdx: idx, purchaseId: row[0], supplier: row[4] })}
-                                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-secondary)', display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.78rem' }}>
-                                                <CheckCircle size={14} /> Paid
+                                        <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
+                                            <button onClick={() => openViewModal(row)}
+                                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-tertiary)', display: 'flex', alignItems: 'center', gap: '0.2rem', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>
+                                                <Eye size={13} /><span className="desktop-only">View</span>
                                             </button>
-                                        )}
+                                            {row[8] !== 'Paid' && (
+                                                <button onClick={() => setConfirmModal({ open: true, rowIdx: idx, purchaseId: row[0], supplier: row[4], amount: row[7] })}
+                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-secondary)', display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.78rem', whiteSpace: 'nowrap' }}>
+                                                    <CheckCircle size={14} /> Paid
+                                                </button>
+                                            )}
+                                        </div>
                                     </td>
                                 </tr>
                             ))}
@@ -506,6 +545,17 @@ export default function Purchases() {
                                 <input required type="date" className="input-field" value={confirmForm.payDate} onChange={e => setConfirmForm({ ...confirmForm, payDate: e.target.value })} />
                             </div>
                             <div className="input-group">
+                                <label className="input-label">Payment Mode *</label>
+                                <select className="input-field" value={confirmForm.payMode} onChange={e => setConfirmForm({ ...confirmForm, payMode: e.target.value })}>
+                                    <option value="Bank Transfer">Bank Transfer / NEFT / UPI</option>
+                                    <option value="Cash">Cash (deducted from Cash In Hand)</option>
+                                    <option value="Cheque">Cheque</option>
+                                </select>
+                                {confirmForm.payMode === 'Cash' && (
+                                    <p style={{ fontSize: '0.72rem', color: 'var(--color-warning)', marginTop: '0.2rem' }}>⚠ ₹{parseFloat(confirmModal?.amount || '0').toLocaleString('en-IN')} will be deducted from your Cash In Hand balance.</p>
+                                )}
+                            </div>
+                            <div className="input-group">
                                 <label className="input-label">Transaction / Cheque Ref No.</label>
                                 <input className="input-field" placeholder="e.g. UTR-987654 or CHQ-0088" value={confirmForm.refNo} onChange={e => setConfirmForm({ ...confirmForm, refNo: e.target.value })} />
                             </div>
@@ -517,6 +567,93 @@ export default function Purchases() {
                                     {isSubmitting ? 'Saving…' : 'Mark as Paid'}
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── View Purchase Detail Modal ────────────────────────────────────── */}
+            {viewPurchase && (
+                <div className="modal-overlay" style={{ zIndex: 60 }}
+                    onClick={(e) => { if (e.target === e.currentTarget) setViewPurchase(null); }}>
+                    <div className="card" style={{ width: '100%', maxWidth: '580px', maxHeight: '90vh', overflowY: 'auto' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                            <h2 style={{ fontSize: '1.1rem' }}>Purchase — <span style={{ color: 'var(--color-primary)' }}>{viewPurchase.header[1]}</span></h2>
+                            <button onClick={() => setViewPurchase(null)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} /></button>
+                        </div>
+
+                        {/* Header info */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem 1.5rem', fontSize: '0.85rem', marginBottom: '1rem', padding: '0.75rem', background: 'var(--bg-app)', borderRadius: 'var(--radius-md)' }}>
+                            <div><span style={{ color: 'var(--text-secondary)' }}>Date:</span> <strong>{viewPurchase.header[2] ? format(new Date(viewPurchase.header[2]), 'dd MMM yyyy') : '-'}</strong></div>
+                            <div><span style={{ color: 'var(--text-secondary)' }}>Supplier:</span> <strong>{viewPurchase.header[4]}</strong></div>
+                            <div><span style={{ color: 'var(--text-secondary)' }}>Status:</span> <span className={`badge ${viewPurchase.header[8] === 'Paid' ? 'badge-success' : 'badge-warning'}`}>{viewPurchase.header[8] || 'Unpaid'}</span></div>
+                            {viewPurchase.header[9] && <div><span style={{ color: 'var(--text-secondary)' }}>Pay Date:</span> <strong>{format(new Date(viewPurchase.header[9]), 'dd MMM yyyy')}</strong></div>}
+                            {viewPurchase.header[10] && <div style={{ gridColumn: '1/-1' }}><span style={{ color: 'var(--text-secondary)' }}>Ref:</span> <span style={{ fontFamily: 'monospace' }}>{viewPurchase.header[10]}</span></div>}
+                        </div>
+
+                        {/* Items */}
+                        {isViewLoading ? (
+                            <div style={{ textAlign: 'center', padding: '1rem', color: 'var(--text-tertiary)' }}><Loader size={16} style={{ animation: 'spin 1s linear infinite' }} /></div>
+                        ) : (
+                            <div style={{ border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', overflowX: 'auto' }}>
+                                <table style={{ fontSize: '0.82rem', minWidth: '420px' }}>
+                                    <thead>
+                                        <tr>
+                                            <th>Material</th>
+                                            <th>Bags</th>
+                                            <th>Weight (KG)</th>
+                                            <th>Rate / KG</th>
+                                            <th style={{ textAlign: 'right' }}>Amount</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {viewPurchase.items.length === 0 ? (
+                                            <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--text-tertiary)', padding: '1rem' }}>No items found.</td></tr>
+                                        ) : viewPurchase.items.map((item, i) => (
+                                            <tr key={i}>
+                                                <td style={{ fontWeight: 500 }}>{item[3]}</td>
+                                                <td>{item[4] || '-'}</td>
+                                                <td>{item[5]} KG</td>
+                                                <td>₹{parseFloat(item[6] || '0').toFixed(2)}</td>
+                                                <td style={{ textAlign: 'right', fontWeight: 600 }}>₹{parseFloat(item[7] || '0').toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                    <tfoot>
+                                        <tr style={{ backgroundColor: 'var(--bg-app)' }}>
+                                            <td colSpan={4} style={{ textAlign: 'right', fontWeight: 600, padding: '0.5rem 0.75rem', fontSize: '0.85rem' }}>Subtotal</td>
+                                            <td style={{ textAlign: 'right', fontWeight: 600, padding: '0.5rem 0.75rem' }}>₹{parseFloat(viewPurchase.header[5] || '0').toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                        </tr>
+                                        <tr style={{ backgroundColor: 'var(--bg-app)' }}>
+                                            <td colSpan={4} style={{ textAlign: 'right', fontWeight: 600, padding: '0.5rem 0.75rem', fontSize: '0.85rem' }}>Tax Amount</td>
+                                            <td style={{ textAlign: 'right', fontWeight: 600, padding: '0.5rem 0.75rem' }}>₹{parseFloat(viewPurchase.header[6] || '0').toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                        </tr>
+                                        <tr style={{ backgroundColor: 'var(--bg-app)', borderTop: '2px solid var(--border-color)' }}>
+                                            <td colSpan={4} style={{ textAlign: 'right', fontWeight: 700, padding: '0.75rem', fontSize: '0.9rem' }}>Grand Total</td>
+                                            <td style={{ textAlign: 'right', fontWeight: 700, padding: '0.75rem', fontSize: '1rem', color: 'var(--color-primary)' }}>₹{parseFloat(viewPurchase.header[7] || '0').toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        )}
+
+                        {/* Photos */}
+                        {viewPurchase.header[11] && (
+                            <div style={{ marginTop: '1rem' }}>
+                                <p style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>INVOICE PHOTOS</p>
+                                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                    {viewPurchase.header[11].split(', ').map((url: string, i: number) => (
+                                        <a key={i} href={url} target="_blank" rel="noreferrer"
+                                            style={{ fontSize: '0.78rem', color: 'var(--color-primary)', display: 'flex', alignItems: 'center', gap: '0.2rem', padding: '0.35rem 0.6rem', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-sm)' }}>
+                                            <ImageIcon size={13} /> Photo {i + 1}
+                                        </a>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
+                            <button className="btn btn-secondary" onClick={() => setViewPurchase(null)}>Close</button>
                         </div>
                     </div>
                 </div>

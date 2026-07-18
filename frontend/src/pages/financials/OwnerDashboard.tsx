@@ -26,6 +26,10 @@ export default function OwnerDashboard() {
         revenue: 0, purchases: 0, expenses: 0, grossProfit: 0, netProfit: 0,
         realizedRevenue: 0, unrealizedRevenue: 0,
         realizedProfit: 0, unrealizedProfit: 0,
+        invoiceRevenue: 0, cashRevenue: 0,
+    });
+    const [cashPosition, setCashPosition] = useState({
+        cashInHand: 0, bankReceivables: 0, periodCashSales: 0, periodCashExpenses: 0, periodSupplierCash: 0,
     });
     const [overdueInvoices, setOverdueInvoices] = useState<OverdueInvoice[]>([]);
     const [inventory, setInventory] = useState<InventoryItem[]>([]);
@@ -36,13 +40,14 @@ export default function OwnerDashboard() {
             if (!accessToken) return;
             setIsLoading(true);
             try {
-                const [salesData, purchasesData, saleItemsData, purchaseItemsData, materialsData, expensesData] = await Promise.all([
+                const [salesData, purchasesData, saleItemsData, purchaseItemsData, materialsData, expensesData, cashLedgerData] = await Promise.all([
                     fetchSheetData(accessToken, 'Sales!A2:O'),
                     fetchSheetData(accessToken, 'Purchases!A2:J'),
                     fetchSheetData(accessToken, 'Sale_Items!A2:I'),
                     fetchSheetData(accessToken, 'Purchase_Items!A2:H'),
                     fetchSheetData(accessToken, 'Materials!A2:I'),
                     fetchSheetData(accessToken, 'Expenses!A2:F'),
+                    fetchSheetData(accessToken, 'Cash_Ledger!A2:F'),
                 ]);
 
                 const now = new Date();
@@ -63,13 +68,18 @@ export default function OwnerDashboard() {
                 let revenue = 0;
                 let realizedRevenue = 0;
                 let unrealizedRevenue = 0;
+                let invoiceRevenue = 0;
+                let cashRevenue = 0;
                 let costOfGoodsSold = 0;
                 let realizedCOGS = 0;
                 salesData.filter((r: any) => filterDate(r[2])).forEach((sale: any) => {
                     const amt = parseFloat(sale[10] || '0');
+                    const mode = sale[11] || '';
                     revenue += amt;
                     if (sale[12] === 'Confirmed') realizedRevenue += amt;
                     else unrealizedRevenue += amt;
+                    if (mode === 'Cash' || mode === 'Cash-Invoice') cashRevenue += amt;
+                    else invoiceRevenue += amt;
                 });
 
                 // Avg purchase cost per KG per material
@@ -128,7 +138,23 @@ export default function OwnerDashboard() {
                 const realizedProfit = realizedRevenue - realizedCOGS;
                 const unrealizedProfit = unrealizedRevenue - (costOfGoodsSold - realizedCOGS);
 
-                setPnl({ revenue, purchases: purchaseSpend, expenses, grossProfit, netProfit, realizedRevenue, unrealizedRevenue, realizedProfit, unrealizedProfit });
+                setPnl({ revenue, purchases: purchaseSpend, expenses, grossProfit, netProfit, realizedRevenue, unrealizedRevenue, realizedProfit, unrealizedProfit, invoiceRevenue, cashRevenue });
+
+                // --- Cash Position ---
+                const cashInHand = cashLedgerData.reduce((sum: number, r: any) => sum + parseFloat(r[4] || '0'), 0);
+                const bankReceivables = salesData
+                    .filter((r: any) => r[12] !== 'Confirmed' && (r[11] === 'Bank Transfer' || r[11] === 'Cheque'))
+                    .reduce((sum: number, r: any) => sum + parseFloat(r[10] || '0'), 0);
+                const periodCashSales = salesData
+                    .filter((r: any) => filterDate(r[2]) && (r[11] === 'Cash' || r[11] === 'Cash-Invoice'))
+                    .reduce((sum: number, r: any) => sum + parseFloat(r[10] || '0'), 0);
+                const periodCashExpenses = expensesData
+                    .filter((r: any) => filterDate(r[1]) && r[5] === 'Cash')
+                    .reduce((sum: number, r: any) => sum + parseFloat(r[3] || '0'), 0);
+                const periodSupplierCash = cashLedgerData
+                    .filter((r: any) => filterDate(r[1]) && r[2] === 'Cash Purchase Payment')
+                    .reduce((sum: number, r: any) => sum + Math.abs(parseFloat(r[4] || '0')), 0);
+                setCashPosition({ cashInHand, bankReceivables, periodCashSales, periodCashExpenses, periodSupplierCash });
 
                 // --- Overdue Invoices (>30 days, unpaid) ---
                 const overdue: OverdueInvoice[] = salesData
@@ -210,6 +236,37 @@ export default function OwnerDashboard() {
                         <p style={{ fontSize: '1.4rem', fontWeight: 700, color: card.color }}>{isLoading ? '…' : fmt(card.value)}</p>
                     </div>
                 ))}
+            </div>
+
+            {/* Cash Position Section */}
+            <div className="card" style={{ marginBottom: '1.5rem', borderTop: '3px solid var(--color-secondary)' }}>
+                <p style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-secondary)', marginBottom: '1rem' }}>💵 Cash Position</p>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem' }}>
+                    {[
+                        { label: 'Cash In Hand', value: cashPosition.cashInHand, color: cashPosition.cashInHand >= 0 ? 'var(--color-secondary)' : 'var(--color-danger)', note: 'All time running balance' },
+                        { label: 'Bank Receivables', value: cashPosition.bankReceivables, color: 'var(--color-warning)', note: 'Unpaid bank invoices' },
+                        { label: 'Cash Sales (Period)', value: cashPosition.periodCashSales, color: 'var(--color-secondary)', note: 'Cash + Cash-Invoice' },
+                        { label: 'Cash Expenses (Period)', value: cashPosition.periodCashExpenses, color: 'var(--color-danger)', note: 'Expenses paid in cash' },
+                        { label: 'Supplier Paid (Cash)', value: cashPosition.periodSupplierCash, color: 'var(--color-danger)', note: 'Purchases paid in cash' },
+                    ].map(card => (
+                        <div key={card.label} style={{ textAlign: 'center', padding: '0.75rem', background: 'var(--bg-app)', borderRadius: 'var(--radius-md)' }}>
+                            <p style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginBottom: '0.3rem' }}>{card.label}</p>
+                            <p style={{ fontSize: '1.2rem', fontWeight: 700, color: card.color }}>{isLoading ? '…' : fmt(card.value)}</p>
+                            <p style={{ fontSize: '0.65rem', color: 'var(--text-tertiary)', marginTop: '0.15rem' }}>{card.note}</p>
+                        </div>
+                    ))}
+                </div>
+                {/* Revenue Breakdown */}
+                <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border-color)', display: 'flex', gap: '1.5rem', flexWrap: 'wrap' }}>
+                    <div>
+                        <p style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Invoice Revenue (Bank)</p>
+                        <p style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-primary)' }}>{isLoading ? '…' : fmt(pnl.invoiceRevenue)}</p>
+                    </div>
+                    <div>
+                        <p style={{ fontSize: '0.72rem', color: 'var(--text-secondary)' }}>Cash Revenue (Cash + Cash-Invoice)</p>
+                        <p style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--color-secondary)' }}>{isLoading ? '…' : fmt(pnl.cashRevenue)}</p>
+                    </div>
+                </div>
             </div>
 
             {/* Realized vs Unrealized */}

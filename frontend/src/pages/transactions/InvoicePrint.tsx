@@ -172,31 +172,36 @@ export default function InvoicePrint({ invoiceNo, onClose }: { invoiceNo: string
         const cgst = parseFloat(invoice.cgst || '0');
         const sgst = parseFloat(invoice.sgst || '0');
         const fmtD = (d: string) => d ? format(new Date(d), 'dd/MM/yyyy') : '';
+        const shareMode = invoice.paymentMode || 'Bank Transfer';
+        const shareLabel = shareMode === 'Cash' ? 'CASH MEMO' : shareMode === 'Cash-Invoice' ? 'TAX INVOICE CASH' : 'TAX INVOICE';
+        const isCashMemoShare = shareMode === 'Cash';
 
         const itemLines = invoice.items
             .filter(i => i.materialName)
             .map(i => `  • ${i.materialName}: ${i.weight} KG @ ₹${i.rate}/KG = ₹${parseFloat(i.amount || '0').toFixed(2)}`)
             .join('\n');
 
+        const taxLines = isCashMemoShare
+            ? ''
+            : `CGST:       ₹${cgst.toFixed(2)}\nSGST:       ₹${sgst.toFixed(2)}\n`;
+
         const textSummary =
             `*M/S. SHREEJEE ENTERPRISES*
 _Dealers in: All Types of Plastic Raw Materials_
 
-*TAX INVOICE*
+*${shareLabel}*
 ━━━━━━━━━━━━━━━━━━━━━━
 *Invoice No:* ${invoice.invoiceNo}   *Date:* ${fmtD(invoice.invoiceDate)}
 *Challan No:* ${invoice.challanNo}
 *Bill To:* ${invoice.customerName}
-${invoice.customerGstin ? `*GSTIN:* ${invoice.customerGstin}` : ''}
+${invoice.customerGstin && !isCashMemoShare ? `*GSTIN:* ${invoice.customerGstin}` : ''}
 
 *Items:*
 ${itemLines}
 
 ━━━━━━━━━━━━━━━━━━━━━━
 Subtotal:   ₹${subTot.toFixed(2)}
-CGST:       ₹${cgst.toFixed(2)}
-SGST:       ₹${sgst.toFixed(2)}
-*GRAND TOTAL: ₹${grandTot.toFixed(2)}*
+${taxLines}*GRAND TOTAL: ₹${grandTot.toFixed(2)}*
 ━━━━━━━━━━━━━━━━━━━━━━
 *Payment:* ${invoice.paymentMode} · ${invoice.paymentStatus}
 ${invoice.payRef ? `*Ref:* ${invoice.payRef}` : ''}
@@ -362,11 +367,22 @@ GSTIN: ${CO.gstin} | 📞 ${CO.mob}`;
                         </div>
                     </div>
 
-                    {/* TAX INVOICE + GSTIN bar */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '0.4rem 0', padding: '0.2rem 0.5rem', border: '1px solid #8B0000' }}>
-                        <span style={{ backgroundColor: '#8B0000', color: 'white', fontWeight: 800, fontSize: '0.85rem', padding: '0.1rem 0.9rem', letterSpacing: '0.08em' }}>TAX INVOICE</span>
-                        <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>GSTIN No. <strong style={{ color: '#8B0000' }}>{CO.gstin}</strong></span>
-                    </div>
+                    {/* TAX INVOICE / TAX INVOICE CASH / CASH MEMO header bar */}
+                    {(() => {
+                        const mode = invoice.paymentMode || 'Bank Transfer';
+                        const isCashMemo = mode === 'Cash';
+                        const isCashInvoice = mode === 'Cash-Invoice';
+                        const headerLabel = isCashMemo ? 'CASH MEMO' : isCashInvoice ? 'TAX INVOICE CASH' : 'TAX INVOICE';
+                        return (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '0.4rem 0', padding: '0.2rem 0.5rem', border: '1px solid #8B0000' }}>
+                                <span style={{ backgroundColor: '#8B0000', color: 'white', fontWeight: 800, fontSize: '0.85rem', padding: '0.1rem 0.9rem', letterSpacing: '0.08em' }}>{headerLabel}</span>
+                                {isCashMemo
+                                    ? <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#777', fontStyle: 'italic' }}>Cash Sale — GST Not Applicable</span>
+                                    : <span style={{ fontSize: '0.75rem', fontWeight: 600 }}>GSTIN No. <strong style={{ color: '#8B0000' }}>{CO.gstin}</strong></span>
+                                }
+                            </div>
+                        );
+                    })()}
 
                     {/* Bill To + Invoice Meta */}
                     <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '0.4rem' }}>
@@ -477,19 +493,28 @@ GSTIN: ${CO.gstin} | 📞 ${CO.mob}`;
                                 <td style={{ ...td({ verticalAlign: 'top', width: '45%', padding: 0 }) }}>
                                     <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                                         <tbody>
-                                            {[
-                                                { label: 'TOTAL', value: subTotal, bold: false },
-                                                { label: `CGST ${taxPct}%`, value: cgstAmt, bold: false },
-                                                { label: `SGST ${taxPct}%`, value: sgstAmt, bold: false },
-                                                { label: 'R.O.', value: roundOff, bold: false },
-                                            ].map(row => (
-                                                <tr key={row.label}>
-                                                    <td style={{ ...td({ textAlign: 'right', padding: '4px 8px', fontWeight: row.bold ? 700 : 500 }) }}>{row.label}</td>
-                                                    <td style={{ ...td({ textAlign: 'right', padding: '4px 8px', fontWeight: row.bold ? 700 : 500, width: '45%' }) }}>
-                                                        {Math.abs(row.value) > 0.005 ? fmt2(row.value) : '-'}
-                                                    </td>
-                                                </tr>
-                                            ))}
+                                            {(() => {
+                                                const mode = invoice.paymentMode || 'Bank Transfer';
+                                                const isCashMemo = mode === 'Cash';
+                                                const rows = isCashMemo
+                                                    ? [
+                                                        { label: 'TOTAL', value: subTotal, bold: false },
+                                                    ]
+                                                    : [
+                                                        { label: 'TOTAL', value: subTotal, bold: false },
+                                                        { label: `CGST ${taxPct}%`, value: cgstAmt, bold: false },
+                                                        { label: `SGST ${taxPct}%`, value: sgstAmt, bold: false },
+                                                        { label: 'R.O.', value: roundOff, bold: false },
+                                                    ];
+                                                return rows.map(row => (
+                                                    <tr key={row.label}>
+                                                        <td style={{ ...td({ textAlign: 'right', padding: '4px 8px', fontWeight: row.bold ? 700 : 500 }) }}>{row.label}</td>
+                                                        <td style={{ ...td({ textAlign: 'right', padding: '4px 8px', fontWeight: row.bold ? 700 : 500, width: '45%' }) }}>
+                                                            {Math.abs(row.value) > 0.005 ? fmt2(row.value) : '-'}
+                                                        </td>
+                                                    </tr>
+                                                ));
+                                            })()}
                                             <tr style={{ backgroundColor: '#8B0000' }}>
                                                 <td style={{ ...td({ textAlign: 'right', padding: '6px 8px', fontWeight: 800, fontSize: '0.85rem', color: 'white', border: '1px solid #8B0000' }) }}>GRAND TOTAL</td>
                                                 <td style={{ ...td({ textAlign: 'right', padding: '6px 8px', fontWeight: 800, fontSize: '0.9rem', color: 'white', border: '1px solid #8B0000' }) }}>

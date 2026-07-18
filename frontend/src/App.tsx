@@ -9,6 +9,7 @@ import Materials from './pages/masters/Materials';
 import Parties from './pages/masters/Parties';
 import Expenses from './pages/financials/Expenses';
 import OwnerDashboard from './pages/financials/OwnerDashboard';
+import CashLedger from './pages/financials/CashLedger';
 
 // All authenticated users
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -33,6 +34,7 @@ function AppRoutes() {
       {/* Owner-only */}
       <Route path="/" element={<OwnerRoute><Dashboard /></OwnerRoute>} />
       <Route path="/owner" element={<OwnerRoute><OwnerDashboard /></OwnerRoute>} />
+      <Route path="/cash-ledger" element={<OwnerRoute><CashLedger /></OwnerRoute>} />
 
       {/* Both roles */}
       <Route path="/sales" element={<ProtectedRoute><Sales /></ProtectedRoute>} />

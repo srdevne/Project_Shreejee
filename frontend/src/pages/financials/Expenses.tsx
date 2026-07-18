@@ -61,8 +61,9 @@ export default function Expenses() {
         if (!accessToken) return;
         setIsSubmitting(true);
         try {
+            const expId = `EXP-${Date.now()}`;
             const row = [
-                `EXP-${Date.now()}`,
+                expId,
                 formData.date,
                 formData.category,
                 formData.amount,
@@ -70,6 +71,20 @@ export default function Expenses() {
                 formData.paymentMode,
             ];
             await appendRow(accessToken, 'Expenses!A:F', [row]);
+
+            // Auto-write Cash_Ledger debit for cash expenses
+            if (formData.paymentMode === 'Cash') {
+                const clRow = [
+                    `CL-${Date.now()}`,
+                    formData.date,
+                    'Cash Expense',
+                    expId,
+                    (-parseFloat(formData.amount || '0')).toFixed(2),
+                    `${formData.category}${formData.description ? ' — ' + formData.description : ''}`,
+                ];
+                await appendRow(accessToken, 'Cash_Ledger!A:F', [clRow]);
+            }
+
             setIsModalOpen(false);
             setFormData({
                 date: new Date().toISOString().split('T')[0],
