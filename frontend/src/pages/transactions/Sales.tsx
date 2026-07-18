@@ -55,6 +55,10 @@ export default function Sales() {
     // Print / view invoice
     const [printInvoiceNo, setPrintInvoiceNo] = useState<string | null>(null);
 
+    // Inline new party state
+    const [showPartyForm, setShowPartyForm] = useState(false);
+    const [partyFormData, setPartyFormData] = useState({ name: '', type: 'Customer', gstin: '', phone: '', address: '' });
+
     const loadData = async () => {
         if (!accessToken) return;
         setIsLoading(true);
@@ -102,13 +106,62 @@ export default function Sales() {
 
     // When customer is selected, auto-populate GSTIN + address
     const handleCustomerSelect = (partyId: string) => {
-        const party = parties.find(p => p[0] === partyId);
+        // If we just appended a party, it might not be in the existing parties list until next render, but we assume it is appended properly
+        const party = parties.find(p => p[0] === partyId) || [partyId, '', '', '', '', '', '', ''];
         setFormData(prev => ({
             ...prev,
             customerId: partyId,
-            customerGstin: party?.[3] || '',
-            customerAddress: party?.[6] || '',
+            customerGstin: party[3] || '',
+            customerAddress: party[6] || '',
         }));
+    };
+
+    const handlePaymentModeChange = async (mode: string) => {
+        setFormData(prev => ({ ...prev, paymentMode: mode }));
+        let prefix = 'INV';
+        if (mode === 'Cash-Invoice') prefix = 'INV-CM';
+        else if (mode === 'Cash') prefix = 'C-INV';
+        
+        const invNo = await getNextInvoiceNumber(accessToken!, prefix);
+        setFormData(prev => ({ ...prev, invoiceNo: invNo, paymentMode: mode }));
+    };
+
+    const handleInlinePartySubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!accessToken) return;
+        setIsSubmitting(true);
+        try {
+            const pId = `PTY-${Date.now()}`;
+            const rowData = [
+                pId,
+                partyFormData.name,
+                partyFormData.type,
+                partyFormData.gstin.toUpperCase(),
+                partyFormData.phone,
+                '', // email
+                partyFormData.address,
+                'Active' // Status
+            ];
+            await appendRow(accessToken, 'Parties!A:H', [rowData]);
+            
+            setParties(prev => [...prev, rowData]);
+            
+            // set it as selected directly without relying on find immediately
+            setFormData(prev => ({
+                ...prev,
+                customerId: pId,
+                customerGstin: partyFormData.gstin.toUpperCase(),
+                customerAddress: partyFormData.address,
+            }));
+            
+            setShowPartyForm(false);
+            setPartyFormData({ name: '', type: 'Customer', gstin: '', phone: '', address: '' });
+        } catch (error) {
+            console.error(error);
+            alert('Failed to save party.');
+        } finally {
+            setIsSubmitting(false);
+        }
     };
 
     const handleMaterialSelect = (matId: string) => {
@@ -376,24 +429,50 @@ export default function Sales() {
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
                             <div className="input-group">
                                 <label className="input-label">Invoice No</label>
-                                <input className="input-field" value={formData.invoiceNo} readOnly style={{ opacity: 0.7 }} />
+                                <input className="input-field" value={formData.invoiceNo} onChange={e => setFormData({ ...formData, invoiceNo: e.target.value })} />
                             </div>
                             <div className="input-group">
                                 <label className="input-label">Invoice Date *</label>
                                 <input required type="date" className="input-field" value={formData.date} onChange={e => setFormData({ ...formData, date: e.target.value })} />
                             </div>
                             <div className="input-group" style={{ gridColumn: '1 / -1' }}>
-                                <label className="input-label">Customer *</label>
-                                <select required className="input-field" value={formData.customerId}
-                                    onChange={e => handleCustomerSelect(e.target.value)}>
-                                    <option value="">-- Select Customer --</option>
-                                    {parties.map(p => <option key={p[0]} value={p[0]}>{p[1]}</option>)}
-                                </select>
-                                {formData.customerGstin && (
-                                    <p style={{ margin: '0.2rem 0 0', fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
-                                        GSTIN: <strong>{formData.customerGstin}</strong>
-                                        {formData.customerAddress && <> &nbsp;·&nbsp; {formData.customerAddress.split('\n')[0]}</>}
-                                    </p>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <label className="input-label">Customer *</label>
+                                    {!showPartyForm && (
+                                        <button type="button" onClick={() => setShowPartyForm(true)} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
+                                            <Plus size={12} /> New Party
+                                        </button>
+                                    )}
+                                </div>
+                                {!showPartyForm ? (
+                                    <>
+                                        <select required className="input-field" value={formData.customerId}
+                                            onChange={e => handleCustomerSelect(e.target.value)}>
+                                            <option value="">-- Select Customer --</option>
+                                            {parties.map(p => <option key={p[0]} value={p[0]}>{p[1]}</option>)}
+                                        </select>
+                                        {formData.customerGstin && (
+                                            <p style={{ margin: '0.2rem 0 0', fontSize: '0.72rem', color: 'var(--text-secondary)' }}>
+                                                GSTIN: <strong>{formData.customerGstin}</strong>
+                                                {formData.customerAddress && <> &nbsp;·&nbsp; {formData.customerAddress.split('\n')[0]}</>}
+                                            </p>
+                                        )}
+                                    </>
+                                ) : (
+                                    <div style={{ background: 'var(--bg-card)', padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                                            <input className="input-field" placeholder="Party Name *" value={partyFormData.name} onChange={e => setPartyFormData({ ...partyFormData, name: e.target.value })} />
+                                            <input className="input-field" placeholder="GSTIN" value={partyFormData.gstin} onChange={e => setPartyFormData({ ...partyFormData, gstin: e.target.value })} />
+                                            <input className="input-field" placeholder="Phone" value={partyFormData.phone} onChange={e => setPartyFormData({ ...partyFormData, phone: e.target.value })} />
+                                            <input className="input-field" placeholder="City/Address" value={partyFormData.address} onChange={e => setPartyFormData({ ...partyFormData, address: e.target.value })} />
+                                        </div>
+                                        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.25rem' }}>
+                                            <button type="button" className="btn btn-secondary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }} onClick={() => setShowPartyForm(false)}>Cancel</button>
+                                            <button type="button" className="btn btn-primary" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem' }} disabled={isSubmitting || !partyFormData.name} onClick={handleInlinePartySubmit}>
+                                                {isSubmitting ? 'Saving...' : 'Save & Select'}
+                                            </button>
+                                        </div>
+                                    </div>
                                 )}
                             </div>
                             <div className="input-group">
@@ -404,7 +483,7 @@ export default function Sales() {
                             </div>
                             <div className="input-group">
                                 <label className="input-label">Payment Mode</label>
-                                <select className="input-field" value={formData.paymentMode} onChange={e => setFormData({ ...formData, paymentMode: e.target.value })}>
+                                <select className="input-field" value={formData.paymentMode} onChange={e => handlePaymentModeChange(e.target.value)}>
                                     <option value="Bank Transfer">Bank Transfer / Invoice (GST)</option>
                                     <option value="Cash-Invoice">Cash-Invoice (GST + Paid in Cash)</option>
                                     <option value="Cash">Cash (No GST)</option>

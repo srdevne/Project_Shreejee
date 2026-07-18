@@ -101,24 +101,27 @@ export const updateRow = async (
     return true;
 };
 /**
- * Returns the next serial invoice number in format INV-XXXXX
- * Reads all existing invoice numbers from Sales!A2:A and increments the max.
+ * Returns the next serial invoice number based on the prefix.
+ * Reads existing invoice numbers from Sales!A2:A and increments the max.
  */
-export const getNextInvoiceNumber = async (accessToken: string): Promise<string> => {
+export const getNextInvoiceNumber = async (accessToken: string, prefix: string = 'INV'): Promise<string> => {
     try {
         const rows = await fetchSheetData(accessToken, 'Sales!A2:A');
         let max = 0;
+        // Escape special characters in prefix for regex
+        const escapedPrefix = prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const regex = new RegExp(`^${escapedPrefix}-(\\d+)$`);
         rows.forEach(row => {
-            const match = row[0]?.match(/INV-(\d+)/);
+            const match = row[0]?.match(regex);
             if (match) {
                 const num = parseInt(match[1], 10);
                 if (num > max) max = num;
             }
         });
         const next = String(max + 1).padStart(5, '0');
-        return `INV-${next}`;
+        return `${prefix}-${next}`;
     } catch {
-        return `INV-${String(Date.now()).slice(-5)}`;
+        return `${prefix}-${String(Date.now()).slice(-5)}`;
     }
 };
 

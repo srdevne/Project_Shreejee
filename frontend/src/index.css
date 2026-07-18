@@ -452,21 +452,16 @@ tbody tr:hover {
   inset: 0;
   background-color: rgba(0, 0, 0, 0.55);
   z-index: 50;
-  overflow-y: auto;
-  /* Inner content centered via flex on a min-height wrapper */
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
   padding: 1.5rem 1rem;
 }
 
-/* The card inside a modal-overlay will be naturally centered because
-   the overlay is a flex column with padding. On tall forms it scrolls. */
 .modal-overlay>.card {
   width: 100%;
-  margin: auto 0;
-  /* vertical centering when content is short */
-  flex-shrink: 0;
+  max-height: 95vh;
+  overflow-y: auto;
 }
 
 /* ── Dashboard bottom row: stacks on mobile ── */
