@@ -243,7 +243,7 @@ export default function Sales() {
                     formData.invoiceNo,
                     item.materialId, item.materialName,
                     item.bags, item.weight, item.rate,
-                    item.taxRate, item.amount.toFixed(2)
+                    isCashMode ? 0 : item.taxRate, item.amount.toFixed(2)
                 ];
                 await appendRow(accessToken, 'Sale_Items!A:I', [itemRow]);
             }
@@ -598,9 +598,9 @@ export default function Sales() {
                                                     <td>{item.bags || '-'}</td>
                                                     <td>{item.weight}</td>
                                                     <td>&#8377;{item.rate}</td>
-                                                    <td>{item.taxRate}%</td>
+                                                    <td>{isCashMode ? '-' : `${item.taxRate}%`}</td>
                                                     <td style={{ textAlign: 'right', fontWeight: 600 }}>
-                                                        &#8377;{(item.amount + item.taxAmount).toFixed(2)}
+                                                        &#8377;{(item.amount + (isCashMode ? 0 : item.taxAmount)).toFixed(2)}
                                                     </td>
                                                     <td>
                                                         <button onClick={() => removeLineItem(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-danger)' }}>
