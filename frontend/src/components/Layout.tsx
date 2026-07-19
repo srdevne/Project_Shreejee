@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import {
     LayoutDashboard, Users, Package, LogOut, Menu, X,
-    FileText, ShoppingCart, Receipt, TrendingUp, Bell, Wallet
+    FileText, ShoppingCart, Receipt, TrendingUp, Bell, Wallet, BarChart3
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { fetchSheetData } from '../services/googleSheets';
@@ -45,6 +45,7 @@ export default function Layout({ children }: LayoutProps) {
         { name: 'Dashboard', path: '/', icon: <LayoutDashboard size={20} /> },
         ...(user?.role === 'owner' ? [
             { name: 'Analytics', path: '/owner', icon: <TrendingUp size={20} /> },
+            { name: 'Deep Dive', path: '/analytics', icon: <BarChart3 size={20} /> },
             { name: 'Cash Ledger', path: '/cash-ledger', icon: <Wallet size={20} /> },
         ] : []),
         { name: 'Sales', path: '/sales', icon: <FileText size={20} /> },

@@ -71,8 +71,8 @@ export default function CashLedger() {
     }));
 
     const cashInHand = entries.reduce((sum, e) => sum + e.amount, 0);
-    const totalInflows = entries.filter(e => e.amount > 0).reduce((sum, e) => sum + e.amount, 0);
-    const totalOutflows = entries.filter(e => e.amount < 0).reduce((sum, e) => sum + Math.abs(e.amount), 0);
+    const totalInflows = entries.filter(e => e.amount > 0 && e.type !== 'Adjustment').reduce((sum, e) => sum + e.amount, 0);
+    const totalOutflows = entries.filter(e => e.amount < 0 && e.type !== 'Adjustment').reduce((sum, e) => sum + Math.abs(e.amount), 0);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
